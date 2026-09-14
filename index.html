@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cari Takip</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1115;
+    --card:#1a1d24;
+    --card2:#20242c;
+    --border:#2a2f3a;
+    --text:#e7e9ee;
+    --muted:#8b93a3;
+    --accent:#5b8dee;
+    --danger:#e5566d;
+    --danger-bg:#2a1820;
+    --ok:#3fbf7f;
+    --warn:#e0a83f;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    font-size:12.5px;
+    max-width:480px;
+    margin:0 auto;
+    padding-bottom:24px;
+  }
+  .topbar{
+    position:sticky; top:0; z-index:5;
+    background:var(--bg);
+    padding:10px 12px 8px 12px;
+    border-bottom:1px solid var(--border);
+  }
+  .topbar h1{
+    font-size:15px; margin:0 0 2px 0; font-weight:700; letter-spacing:.2px;
+  }
+  #connStatus{
+    font-size:10px; margin:0 0 8px 0; color:var(--warn);
+  }
+  .upload-row{
+    display:flex; gap:6px; align-items:center;
+  }
+  .upload-btn{
+    flex:1;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:8px;
+    padding:8px 10px;
+    font-size:12px;
+    font-weight:600;
+    text-align:center;
+    display:block;
+  }
+  input[type=file]{ display:none; }
+  .search{
+    margin-top:8px;
+    width:100%;
+    background:var(--card2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:7px 9px;
+    color:var(--text);
+    font-size:12px;
+  }
+  .summary{
+    display:flex; gap:6px; margin-top:8px;
+  }
+  .chip{
+    flex:1;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:6px 8px;
+    text-align:center;
+  }
+  .chip .n{ font-size:13px; font-weight:700; display:block; }
+  .chip .l{ font-size:10px; color:var(--muted); }
+  .list{ padding:8px 10px; }
+  .empty{
+    color:var(--muted);
+    text-align:center;
+    padding:40px 20px;
+    font-size:12px;
+    line-height:1.6;
+  }
+  .row{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:9px 10px;
+    margin-bottom:7px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+  .row.flagged{
+    border-color:var(--danger);
+    background:var(--danger-bg);
+  }
+  .row .left{ min-width:0; flex:1; }
+  .row .name{
+    font-size:12.5px; font-weight:600;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row .note-preview{
+    font-size:10.5px; color:var(--danger);
+    margin-top:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row .due{
+    font-size:10px; color:var(--warn); margin-top:2px;
+  }
+  .row .right{
+    text-align:right; flex-shrink:0;
+  }
+  .row .debt{
+    font-size:13px; font-weight:700;
+  }
+  .row .debt.zero{ color:var(--ok); }
+  .row .badge{
+    font-size:9px; color:var(--muted); margin-top:2px;
+  }
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.55);
+    display:none; align-items:flex-end; z-index:20;
+  }
+  .overlay.show{ display:flex; }
+  .sheet{
+    background:var(--card); width:100%;
+    border-radius:14px 14px 0 0;
+    padding:14px 14px 18px 14px;
+    max-height:85vh; overflow-y:auto;
+  }
+  .sheet h2{ font-size:13.5px; margin:0 0 2px 0; }
+  .sheet .sub{ font-size:11px; color:var(--muted); margin-bottom:10px; }
+  .field{ margin-bottom:10px; }
+  .field label{
+    display:block; font-size:10.5px; color:var(--muted); margin-bottom:4px;
+  }
+  .field textarea, .field input[type=date]{
+    width:100%; background:var(--card2); border:1px solid var(--border);
+    border-radius:8px; color:var(--text); padding:8px; font-size:12px;
+    font-family:inherit;
+  }
+  .field textarea{ min-height:70px; resize:vertical; }
+  .toggle-row{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--card2); border:1px solid var(--border);
+    border-radius:8px; padding:8px 10px; margin-bottom:10px;
+  }
+  .toggle-row span{ font-size:11.5px; }
+  .switch{
+    width:38px; height:21px; background:#3a3f4a; border-radius:12px;
+    position:relative; cursor:pointer; flex-shrink:0;
+  }
+  .switch.on{ background:var(--danger); }
+  .switch .dot{
+    width:17px; height:17px; background:#fff; border-radius:50%;
+    position:absolute; top:2px; left:2px; transition:left .15s;
+  }
+  .switch.on .dot{ left:19px; }
+  .btn-row{ display:flex; gap:8px; margin-top:4px; }
+  .btn{
+    flex:1; border:none; border-radius:8px; padding:10px; font-size:12px;
+    font-weight:600;
+  }
+  .btn.save{ background:var(--accent); color:#fff; }
+  .btn.close{ background:var(--card2); color:var(--text); border:1px solid var(--border); }
+  .btn.delete{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); flex:0 0 auto; padding:10px 12px; }
+  .status{
+    font-size:10.5px; color:var(--muted); text-align:center; padding:4px 0 0 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Cari Takip</h1>
+  <div id="connStatus">Baglaniyor...</div>
+  <div class="upload-row">
+    <label class="upload-btn" for="fileInput" id="uploadLabel">Excel Yukle (.xlsx)</label>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+  </div>
+  <input class="search" id="searchBox" placeholder="Cari ara..." />
+  <div class="summary">
+    <div class="chip"><span class="n" id="sumCount">0</span><span class="l">Cari</span></div>
+    <div class="chip"><span class="n" id="sumDebt">0</span><span class="l">Toplam Bakiye</span></div>
+    <div class="chip"><span class="n" id="sumFlag">0</span><span class="l">Sorunlu</span></div>
+  </div>
+</div>
+
+<div class="list" id="list">
+  <div class="empty">Henuz veri yok.<br/>Yukaridan bir Excel dosyasi yukleyin.<br/>Excel'de "Cari Ismi" ve bakiye/borc kolonu olmali.</div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <h2 id="detailName">-</h2>
+    <div class="sub" id="detailDebt">-</div>
+
+    <div class="toggle-row">
+      <span>Sorunlu / Odeme problemi var</span>
+      <div class="switch" id="flagSwitch"><div class="dot"></div></div>
+    </div>
+
+    <div class="field">
+      <label>Aciklama (not)</label>
+      <textarea id="noteInput" placeholder="Ornek: Musteri 20 Eylulde odeyecegini soyledi, iki kez erteledi."></textarea>
+    </div>
+
+    <div class="field">
+      <label>Odeme Beklenen Tarih</label>
+      <input type="date" id="dueInput" />
+    </div>
+
+    <div class="btn-row">
+      <button class="btn close" id="closeBtn">Kapat</button>
+      <button class="btn delete" id="deleteBtn">Sil</button>
+      <button class="btn save" id="saveBtn">Kaydet</button>
+    </div>
+    <div class="status" id="saveStatus"></div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
