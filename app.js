@@ -10,6 +10,13 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
+// ---- PIN ayari ----
+// BURAYI DEGISTIR: kendi PIN'ini yaz. Bu sadece ekrani gizler, gercek
+// bir guvenlik degildir (sayfa kaynagina bakan gorebilir). Firestore
+// kurallarini da ayri ayri kisitlaman gerekir.
+const APP_PIN = "1234";
+const UNLOCK_KEY = "cariTakip_unlocked_v1";
+
 const COLLECTION_NAME = "cariler";
 const cariCollection = collection(db, COLLECTION_NAME);
 
@@ -269,5 +276,41 @@ function wireEvents(){
   });
 }
 
-wireEvents();
-initRealtime();
+function unlockApp(){
+  document.getElementById("lockScreen").classList.add("hidden");
+  document.getElementById("appRoot").classList.remove("locked");
+  wireEvents();
+  initRealtime();
+}
+
+function wirePinScreen(){
+  var input = document.getElementById("pinInput");
+  var btn = document.getElementById("pinSubmit");
+  var err = document.getElementById("pinError");
+
+  function tryUnlock(){
+    if (input.value === APP_PIN){
+      try { localStorage.setItem(UNLOCK_KEY, "1"); } catch (e) {}
+      unlockApp();
+    } else {
+      err.textContent = "Yanlis PIN.";
+      input.value = "";
+      input.focus();
+    }
+  }
+
+  btn.addEventListener("click", tryUnlock);
+  input.addEventListener("keydown", function(e){
+    if (e.key === "Enter") tryUnlock();
+  });
+  input.focus();
+}
+
+var alreadyUnlocked = false;
+try { alreadyUnlocked = localStorage.getItem(UNLOCK_KEY) === "1"; } catch (e) {}
+
+if (alreadyUnlocked){
+  unlockApp();
+} else {
+  wirePinScreen();
+}
