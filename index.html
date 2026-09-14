@@ -177,10 +177,43 @@
   .status{
     font-size:10.5px; color:var(--muted); text-align:center; padding:4px 0 0 0;
   }
+
+  /* Kilit ekrani */
+  #lockScreen{
+    position:fixed; inset:0; background:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    z-index:50; padding:24px;
+  }
+  #lockScreen.hidden{ display:none; }
+  .lock-box{ width:100%; max-width:280px; text-align:center; }
+  .lock-box h2{ font-size:15px; margin:0 0 4px 0; }
+  .lock-box p{ font-size:11px; color:var(--muted); margin:0 0 16px 0; }
+  .lock-box input{
+    width:100%; background:var(--card2); border:1px solid var(--border);
+    border-radius:8px; color:var(--text); padding:11px; font-size:16px;
+    text-align:center; letter-spacing:4px; margin-bottom:10px;
+  }
+  .lock-box button{
+    width:100%; background:var(--accent); color:#fff; border:none;
+    border-radius:8px; padding:11px; font-size:13px; font-weight:600;
+  }
+  .lock-box .err{ color:var(--danger); font-size:11px; margin-top:8px; min-height:14px; }
+  #appRoot.locked{ display:none; }
 </style>
 </head>
 <body>
 
+<div id="lockScreen">
+  <div class="lock-box">
+    <h2>Cari Takip</h2>
+    <p>Devam etmek icin PIN girin</p>
+    <input type="password" inputmode="numeric" id="pinInput" placeholder="••••" maxlength="12" />
+    <button id="pinSubmit">Giris</button>
+    <div class="err" id="pinError"></div>
+  </div>
+</div>
+
+<div id="appRoot" class="locked">
 <div class="topbar">
   <h1>Cari Takip</h1>
   <div id="connStatus">Baglaniyor...</div>
@@ -228,6 +261,8 @@
     <div class="status" id="saveStatus"></div>
   </div>
 </div>
+
+</div><!-- #appRoot -->
 
 <script type="module" src="app.js"></script>
 </body>
