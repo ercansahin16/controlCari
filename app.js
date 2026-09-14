@@ -16,12 +16,18 @@ import {
 // kurallarini da ayri ayri kisitlaman gerekir.
 const APP_PIN = "1234";
 const UNLOCK_KEY = "cariTakip_unlocked_v1";
+const USERNAME_KEY = "cariTakip_userName_v1";
 
 const COLLECTION_NAME = "cariler";
 var cariCollection = null; // ilk kilit acildiginda kurulacak (asagida initRealtime icinde)
 
-var cariler = []; // Firestore'dan gelen canli liste: {id, name, debt, note, due, flagged}
+var cariler = []; // Firestore'dan gelen canli liste
 var currentDocId = null;
+var currentUserName = "";
+
+// ---- Ozel takvim durumu ----
+var calViewYear, calViewMonth; // takvimde gosterilen ay/yil
+var calSelectedISO = ""; // "yyyy-mm-dd" ya da ""
 
 function normalizeHeader(h){
   return (h === null || h === undefined ? "" : h.toString()).toLocaleLowerCase("tr").trim();
@@ -52,6 +58,23 @@ function parseNumber(v){
 
 function fmtMoney(n){
   return (n || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtDateISOtoTR(iso){
+  if (!iso) return "";
+  var parts = iso.split("-");
+  if (parts.length !== 3) return iso;
+  return parts[2] + "." + parts[1] + "." + parts[0];
+}
+
+function fmtTimestamp(ts){
+  if (!ts) return "";
+  try {
+    var d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    return "";
+  }
 }
 
 // Firestore dokuman ID'si icin ismi guvenli hale getir ("/" izinli degil)
@@ -102,7 +125,10 @@ function render(){
         html += '    <div class="note-preview">' + escapeHtml(c.note) + '</div>';
       }
       if (c.due){
-        html += '    <div class="due">Odeme bekleniyor: ' + escapeHtml(c.due) + '</div>';
+        html += '    <div class="due">Odeme bekleniyor: ' + escapeHtml(fmtDateISOtoTR(c.due)) + '</div>';
+      }
+      if (c.lastEditedBy){
+        html += '    <div class="editor">Son duzenleyen: ' + escapeHtml(c.lastEditedBy) + (c.lastEditedAtLabel ? " - " + escapeHtml(c.lastEditedAtLabel) : "") + '</div>';
       }
       html += '  </div>';
       html += '  <div class="right">';
@@ -130,15 +156,146 @@ function render(){
   document.getElementById("sumFlag").textContent = flagCount;
 }
 
+// ---------- Ozel takvim ----------
+
+function pad2(n){ return n < 10 ? "0" + n : "" + n; }
+
+function isoFor(y, m, d){
+  return y + "-" + pad2(m + 1) + "-" + pad2(d);
+}
+
+var TR_MONTHS = ["Ocak","Subat","Mart","Nisan","Mayis","Haziran","Temmuz","Agustos","Eylul","Ekim","Kasim","Aralik"];
+
+function renderCalendar(){
+  var label = document.getElementById("calMonthLabel");
+  label.textContent = TR_MONTHS[calViewMonth] + " " + calViewYear;
+
+  var grid = document.getElementById("calGrid");
+  grid.innerHTML = "";
+
+  var firstOfMonth = new Date(calViewYear, calViewMonth, 1);
+  // Pazartesi=0 ... Pazar=6 olacak sekilde kaydiriyoruz
+  var startWeekday = (firstOfMonth.getDay() + 6) % 7;
+  var daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+
+  var today = new Date();
+  var todayISO = isoFor(today.getFullYear(), today.getMonth(), today.getDate());
+
+  for (var i = 0; i < startWeekday; i++){
+    var empty = document.createElement("div");
+    empty.className = "empty";
+    grid.appendChild(empty);
+  }
+
+  for (var d = 1; d <= daysInMonth; d++){
+    var cell = document.createElement("div");
+    cell.className = "day";
+    cell.textContent = d;
+    var iso = isoFor(calViewYear, calViewMonth, d);
+    if (iso === todayISO) cell.classList.add("today");
+    if (iso === calSelectedISO) cell.classList.add("selected");
+    cell.addEventListener("click", (function(iso){
+      return function(){
+        calSelectedISO = iso;
+        document.getElementById("dueInput").value = iso;
+        document.getElementById("dueDisplay").textContent = fmtDateISOtoTR(iso);
+        document.getElementById("dueDisplay").classList.remove("placeholder");
+        closeCalendar();
+      };
+    })(iso));
+    grid.appendChild(cell);
+  }
+}
+
+function openCalendar(){
+  var popup = document.getElementById("calendarPopup");
+  var iso = document.getElementById("dueInput").value;
+  var base = iso ? new Date(iso + "T00:00:00") : new Date();
+  calViewYear = base.getFullYear();
+  calViewMonth = base.getMonth();
+  calSelectedISO = iso || "";
+  renderCalendar();
+  popup.classList.add("show");
+}
+
+function closeCalendar(){
+  document.getElementById("calendarPopup").classList.remove("show");
+}
+
+function wireCalendar(){
+  document.getElementById("dueFieldBtn").addEventListener("click", function(e){
+    e.stopPropagation();
+    var popup = document.getElementById("calendarPopup");
+    if (popup.classList.contains("show")) closeCalendar();
+    else openCalendar();
+  });
+  document.getElementById("calPrev").addEventListener("click", function(e){
+    e.stopPropagation();
+    calViewMonth--;
+    if (calViewMonth < 0){ calViewMonth = 11; calViewYear--; }
+    renderCalendar();
+  });
+  document.getElementById("calNext").addEventListener("click", function(e){
+    e.stopPropagation();
+    calViewMonth++;
+    if (calViewMonth > 11){ calViewMonth = 0; calViewYear++; }
+    renderCalendar();
+  });
+  document.getElementById("calToday").addEventListener("click", function(e){
+    e.stopPropagation();
+    var today = new Date();
+    var iso = isoFor(today.getFullYear(), today.getMonth(), today.getDate());
+    calSelectedISO = iso;
+    document.getElementById("dueInput").value = iso;
+    document.getElementById("dueDisplay").textContent = fmtDateISOtoTR(iso);
+    document.getElementById("dueDisplay").classList.remove("placeholder");
+    closeCalendar();
+  });
+  document.getElementById("calClear").addEventListener("click", function(e){
+    e.stopPropagation();
+    calSelectedISO = "";
+    document.getElementById("dueInput").value = "";
+    document.getElementById("dueDisplay").textContent = "Tarih secilmedi";
+    document.getElementById("dueDisplay").classList.add("placeholder");
+    closeCalendar();
+  });
+  // popup disina tiklaninca kapat
+  document.addEventListener("click", function(e){
+    var popup = document.getElementById("calendarPopup");
+    var btn = document.getElementById("dueFieldBtn");
+    if (!popup.contains(e.target) && e.target !== btn && !btn.contains(e.target)){
+      closeCalendar();
+    }
+  });
+}
+
+// ---------- Detay paneli ----------
+
 function openDetail(id){
   currentDocId = id;
   var c = cariler.find(function(x){ return x.id === id; });
   if (!c) return;
 
   document.getElementById("detailName").textContent = c.name;
-  document.getElementById("detailDebt").textContent = "Kalan Bakiye: " + fmtMoney(c.debt);
+  var editorText = c.lastEditedBy
+    ? "Son duzenleyen: " + c.lastEditedBy + (c.lastEditedAtLabel ? " - " + c.lastEditedAtLabel : "")
+    : "Henuz kimse duzenlemedi.";
+  document.getElementById("detailEditor").textContent = editorText;
+
+  document.getElementById("debtInput").value = c.debt || 0;
   document.getElementById("noteInput").value = c.note || "";
-  document.getElementById("dueInput").value = c.due || "";
+
+  var iso = c.due || "";
+  document.getElementById("dueInput").value = iso;
+  var dueDisplay = document.getElementById("dueDisplay");
+  if (iso){
+    dueDisplay.textContent = fmtDateISOtoTR(iso);
+    dueDisplay.classList.remove("placeholder");
+  } else {
+    dueDisplay.textContent = "Tarih secilmedi";
+    dueDisplay.classList.add("placeholder");
+  }
+
   var sw = document.getElementById("flagSwitch");
   sw.classList.toggle("on", !!c.flagged);
   document.getElementById("saveStatus").textContent = "";
@@ -146,6 +303,7 @@ function openDetail(id){
 }
 
 function closeDetail(){
+  closeCalendar();
   document.getElementById("overlay").classList.remove("show");
   currentDocId = null;
 }
@@ -153,11 +311,17 @@ function closeDetail(){
 async function saveCurrentNote(){
   if (!currentDocId) return;
   var status = document.getElementById("saveStatus");
+  var debtVal = parseFloat(document.getElementById("debtInput").value);
+  if (isNaN(debtVal)) debtVal = 0;
+
   var data = {
+    debt: debtVal,
     note: document.getElementById("noteInput").value,
     due: document.getElementById("dueInput").value,
     flagged: document.getElementById("flagSwitch").classList.contains("on"),
-    updatedAt: serverTimestamp()
+    lastEditedBy: currentUserName,
+    updatedAt: serverTimestamp(),
+    lastEditedAt: serverTimestamp()
   };
   status.textContent = "Kaydediliyor...";
   try {
@@ -218,7 +382,7 @@ async function handleExcelUpload(file){
       var debt = debtCol !== -1 ? parseNumber(r[debtCol]) : 0;
       var id = docIdFor(nm);
 
-      // merge:true -> mevcut not/tarih/sorunlu bilgisi silinmez, sadece isim ve bakiye guncellenir
+      // merge:true -> mevcut not/tarih/sorunlu/duzenleyen bilgisi silinmez, sadece isim ve bakiye guncellenir
       await setDoc(doc(db, COLLECTION_NAME, id), {
         name: nm,
         debt: debt,
@@ -250,7 +414,9 @@ function initRealtime(){
           debt: d.debt || 0,
           note: d.note || "",
           due: d.due || "",
-          flagged: !!d.flagged
+          flagged: !!d.flagged,
+          lastEditedBy: d.lastEditedBy || "",
+          lastEditedAtLabel: fmtTimestamp(d.lastEditedAt)
         });
       });
       setConnStatus("Canli baglanti aktif", true);
@@ -281,53 +447,93 @@ function wireEvents(){
     if (file) handleExcelUpload(file);
     e.target.value = "";
   });
+  wireCalendar();
+
+  document.getElementById("changeUserLink").addEventListener("click", function(e){
+    e.preventDefault();
+    var yeni = prompt("Adinizi girin:", currentUserName || "");
+    if (yeni !== null && yeni.trim() !== ""){
+      currentUserName = yeni.trim();
+      try { localStorage.setItem(USERNAME_KEY, currentUserName); } catch (err) {}
+      document.getElementById("userNameLabel").textContent = currentUserName;
+    }
+  });
 }
 
 function unlockApp(){
-  console.log("[cariTakip] Kilit aciliyor...");
+  console.log("[cariTakip] Kilit aciliyor. Kullanici:", currentUserName);
   document.getElementById("lockScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("locked");
+  document.getElementById("userNameLabel").textContent = currentUserName;
   wireEvents();
   initRealtime();
 }
 
 function wirePinScreen(){
-  console.log("[cariTakip] PIN ekrani hazirlaniyor...");
-  var input = document.getElementById("pinInput");
+  console.log("[cariTakip] Giris ekrani hazirlaniyor...");
+  var nameInput = document.getElementById("nameInput");
+  var pinInput = document.getElementById("pinInput");
   var btn = document.getElementById("pinSubmit");
   var err = document.getElementById("pinError");
 
-  if (!input || !btn || !err){
-    console.error("[cariTakip] PIN ekrani elemanlari bulunamadi. input:", input, "btn:", btn, "err:", err);
+  if (!nameInput || !pinInput || !btn || !err){
+    console.error("[cariTakip] Giris ekrani elemanlari bulunamadi.");
     return;
   }
 
+  // Daha once girilmis isim varsa on-doldur
+  var savedName = "";
+  try { savedName = localStorage.getItem(USERNAME_KEY) || ""; } catch (e) {}
+  if (savedName) nameInput.value = savedName;
+
   function tryUnlock(){
-    console.log("[cariTakip] Giris denendi, girilen deger:", input.value);
-    if (input.value === APP_PIN){
-      try { localStorage.setItem(UNLOCK_KEY, "1"); } catch (e) {}
-      unlockApp();
-    } else {
-      err.textContent = "Yanlis PIN.";
-      input.value = "";
-      input.focus();
+    var nm = nameInput.value.trim();
+    var pin = pinInput.value;
+    console.log("[cariTakip] Giris denendi. isim:", nm, "pin uzunlugu:", pin.length);
+
+    if (!nm){
+      err.textContent = "Lutfen isminizi girin.";
+      nameInput.focus();
+      return;
     }
+    if (pin !== APP_PIN){
+      err.textContent = "Yanlis PIN.";
+      pinInput.value = "";
+      pinInput.focus();
+      return;
+    }
+
+    currentUserName = nm;
+    try {
+      localStorage.setItem(UNLOCK_KEY, "1");
+      localStorage.setItem(USERNAME_KEY, nm);
+    } catch (e) {}
+    unlockApp();
   }
 
   btn.addEventListener("click", tryUnlock);
-  input.addEventListener("keydown", function(e){
+  pinInput.addEventListener("keydown", function(e){
     if (e.key === "Enter") tryUnlock();
   });
-  input.focus();
-  console.log("[cariTakip] PIN ekrani hazir, buton dinleyicisi baglandi.");
+  nameInput.addEventListener("keydown", function(e){
+    if (e.key === "Enter") pinInput.focus();
+  });
+
+  if (savedName) pinInput.focus(); else nameInput.focus();
+  console.log("[cariTakip] Giris ekrani hazir.");
 }
 
 var alreadyUnlocked = false;
-try { alreadyUnlocked = localStorage.getItem(UNLOCK_KEY) === "1"; } catch (e) {}
+var savedUserName = "";
+try {
+  alreadyUnlocked = localStorage.getItem(UNLOCK_KEY) === "1";
+  savedUserName = localStorage.getItem(USERNAME_KEY) || "";
+} catch (e) {}
 
-console.log("[cariTakip] app.js yuklendi. alreadyUnlocked =", alreadyUnlocked);
+console.log("[cariTakip] app.js yuklendi. alreadyUnlocked =", alreadyUnlocked, "savedUserName =", savedUserName);
 
-if (alreadyUnlocked){
+if (alreadyUnlocked && savedUserName){
+  currentUserName = savedUserName;
   unlockApp();
 } else {
   wirePinScreen();
