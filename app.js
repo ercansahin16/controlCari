@@ -18,7 +18,7 @@ const APP_PIN = "1234";
 const UNLOCK_KEY = "cariTakip_unlocked_v1";
 
 const COLLECTION_NAME = "cariler";
-const cariCollection = collection(db, COLLECTION_NAME);
+var cariCollection = null; // ilk kilit acildiginda kurulacak (asagida initRealtime icinde)
 
 var cariler = []; // Firestore'dan gelen canli liste: {id, name, debt, note, due, flagged}
 var currentDocId = null;
@@ -238,24 +238,31 @@ async function handleExcelUpload(file){
 
 function initRealtime(){
   setConnStatus("Baglaniyor...", false);
-  onSnapshot(cariCollection, function(snapshot){
-    cariler = [];
-    snapshot.forEach(function(docSnap){
-      var d = docSnap.data();
-      cariler.push({
-        id: docSnap.id,
-        name: d.name || docSnap.id,
-        debt: d.debt || 0,
-        note: d.note || "",
-        due: d.due || "",
-        flagged: !!d.flagged
+  try {
+    cariCollection = collection(db, COLLECTION_NAME);
+    onSnapshot(cariCollection, function(snapshot){
+      cariler = [];
+      snapshot.forEach(function(docSnap){
+        var d = docSnap.data();
+        cariler.push({
+          id: docSnap.id,
+          name: d.name || docSnap.id,
+          debt: d.debt || 0,
+          note: d.note || "",
+          due: d.due || "",
+          flagged: !!d.flagged
+        });
       });
+      setConnStatus("Canli baglanti aktif", true);
+      render();
+    }, function(error){
+      console.error("Firestore onSnapshot hatasi:", error);
+      setConnStatus("Baglanti hatasi: " + error.message, false);
     });
-    setConnStatus("Canli baglanti aktif", true);
-    render();
-  }, function(error){
-    setConnStatus("Baglanti hatasi: " + error.message, false);
-  });
+  } catch (e) {
+    console.error("Firestore baglanti kurulamadi:", e);
+    setConnStatus("Baglanti kurulamadi: " + e.message, false);
+  }
 }
 
 function wireEvents(){
@@ -277,6 +284,7 @@ function wireEvents(){
 }
 
 function unlockApp(){
+  console.log("[cariTakip] Kilit aciliyor...");
   document.getElementById("lockScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("locked");
   wireEvents();
@@ -284,11 +292,18 @@ function unlockApp(){
 }
 
 function wirePinScreen(){
+  console.log("[cariTakip] PIN ekrani hazirlaniyor...");
   var input = document.getElementById("pinInput");
   var btn = document.getElementById("pinSubmit");
   var err = document.getElementById("pinError");
 
+  if (!input || !btn || !err){
+    console.error("[cariTakip] PIN ekrani elemanlari bulunamadi. input:", input, "btn:", btn, "err:", err);
+    return;
+  }
+
   function tryUnlock(){
+    console.log("[cariTakip] Giris denendi, girilen deger:", input.value);
     if (input.value === APP_PIN){
       try { localStorage.setItem(UNLOCK_KEY, "1"); } catch (e) {}
       unlockApp();
@@ -304,10 +319,13 @@ function wirePinScreen(){
     if (e.key === "Enter") tryUnlock();
   });
   input.focus();
+  console.log("[cariTakip] PIN ekrani hazir, buton dinleyicisi baglandi.");
 }
 
 var alreadyUnlocked = false;
 try { alreadyUnlocked = localStorage.getItem(UNLOCK_KEY) === "1"; } catch (e) {}
+
+console.log("[cariTakip] app.js yuklendi. alreadyUnlocked =", alreadyUnlocked);
 
 if (alreadyUnlocked){
   unlockApp();
