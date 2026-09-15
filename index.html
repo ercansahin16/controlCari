@@ -7,246 +7,163 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
-    --bg:#0f1115;
-    --card:#1a1d24;
-    --card2:#20242c;
-    --border:#2a2f3a;
-    --text:#e7e9ee;
-    --muted:#8b93a3;
-    --accent:#5b8dee;
-    --danger:#e5566d;
-    --danger-bg:#2a1820;
-    --ok:#3fbf7f;
-    --warn:#e0a83f;
+    --bg:#0f1115; --card:#1a1d24; --card2:#20242c; --border:#2a2f3a;
+    --text:#e7e9ee; --muted:#8b93a3; --accent:#5b8dee; --danger:#e5566d;
+    --danger-bg:#2a1820; --ok:#3fbf7f; --ok-bg:#0f2b1e; --warn:#e0a83f;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html, body{ touch-action: manipulation; }
   body{
-    margin:0;
-    background:var(--bg);
-    color:var(--text);
+    margin:0; background:var(--bg); color:var(--text);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-    font-size:12.5px;
-    max-width:480px;
-    margin:0 auto;
-    padding-bottom:24px;
+    font-size:12.5px; max-width:480px; margin:0 auto; padding-bottom:24px;
   }
-  .topbar{
-    position:sticky; top:0; z-index:5;
-    background:var(--bg);
-    padding:10px 12px 8px 12px;
-    border-bottom:1px solid var(--border);
-  }
-  .topbar-head{
-    display:flex; align-items:center; justify-content:space-between;
-    position:relative;
-  }
-  .topbar h1{
-    font-size:15px; margin:0; font-weight:700; letter-spacing:.2px;
-  }
-  #hamburgerBtn{
+  .topbar{ position:sticky; top:0; z-index:5; background:var(--bg); padding:10px 12px 8px 12px; border-bottom:1px solid var(--border); }
+  .topbar-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; position:relative; }
+  .topbar h1{ font-size:15px; margin:0; font-weight:700; letter-spacing:.2px; flex:1; }
+  .icon-btn{
     background:var(--card); border:1px solid var(--border); color:var(--text);
-    width:30px; height:30px; border-radius:9px; font-size:15px;
-    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    width:30px; height:30px; border-radius:9px; font-size:14px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; position:relative; flex-shrink:0;
   }
+  .icon-btn .badge{
+    position:absolute; top:-6px; right:-6px; background:var(--danger); color:#fff;
+    font-size:9px; font-weight:700; border-radius:10px; min-width:16px; height:16px;
+    padding:0 3px; display:flex; align-items:center; justify-content:center; line-height:1;
+  }
+  .icon-btn .badge.hidden{ display:none; }
   #hamburgerMenu{
-    position:absolute; top:36px; right:0; z-index:40;
-    background:var(--card); border:1px solid var(--border);
-    border-radius:10px; min-width:170px;
-    box-shadow:0 10px 28px rgba(0,0,0,.45);
-    overflow:hidden;
+    position:absolute; top:36px; right:0; z-index:40; background:var(--card);
+    border:1px solid var(--border); border-radius:10px; min-width:190px;
+    box-shadow:0 10px 28px rgba(0,0,0,.45); overflow:hidden;
   }
   #hamburgerMenu.hidden{ display:none; }
-  #hamburgerMenu a{
-    display:block; padding:10px 12px; font-size:12px; color:var(--text);
-    text-decoration:none; border-bottom:1px solid var(--border);
-  }
+  #hamburgerMenu a{ display:block; padding:10px 12px; font-size:12px; color:var(--text); text-decoration:none; border-bottom:1px solid var(--border); }
   #hamburgerMenu a:last-child{ border-bottom:none; }
-  #hamburgerMenu a:active{ background:var(--card2); }
   #hamburgerMenu a.danger{ color:var(--danger); }
-  #userInfo{
-    font-size:10px; color:var(--muted); margin:6px 0;
-  }
+  #userInfo{ font-size:10px; color:var(--muted); margin:6px 0; }
   #userInfo b{ color:var(--text); }
-  #connStatus{
-    font-size:10px; margin:0 0 8px 0; color:var(--warn);
-  }
+  #connStatus{ font-size:10px; margin:0 0 8px 0; color:var(--warn); }
   .upload-row{ display:flex; gap:6px; align-items:center; }
-  .upload-btn{
-    flex:1; background:var(--accent); color:#fff; border:none; border-radius:8px;
-    padding:8px 10px; font-size:12px; font-weight:600; text-align:center; display:block;
-  }
+  .upload-btn{ flex:1; background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 10px; font-size:12px; font-weight:600; text-align:center; display:block; }
   input[type=file]{ display:none; }
-  .search{
-    margin-top:8px; width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; padding:7px 9px; color:var(--text); font-size:12px;
-  }
+  .required-cols{ font-size:9px; color:var(--muted); margin-top:5px; line-height:1.4; }
+  .search{ margin-top:8px; width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:7px 9px; color:var(--text); font-size:12px; }
   .summary{ display:flex; gap:6px; margin-top:8px; }
-  .chip{
-    flex:1; background:var(--card); border:1px solid var(--border);
-    border-radius:8px; padding:6px 8px; text-align:center;
-  }
+  .chip{ flex:1; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:6px 8px; text-align:center; }
   .chip .n{ font-size:13px; font-weight:700; display:block; }
   .chip .l{ font-size:10px; color:var(--muted); }
   .list{ padding:8px 10px; }
-  .empty{
-    color:var(--muted); text-align:center; padding:40px 20px; font-size:12px; line-height:1.6;
-  }
-  .row{
-    background:var(--card); border:1px solid var(--border); border-radius:10px;
-    padding:9px 10px; margin-bottom:7px; display:flex; justify-content:space-between;
-    align-items:center; gap:8px;
-  }
+  .empty{ color:var(--muted); text-align:center; padding:40px 20px; font-size:12px; line-height:1.6; }
+  .row{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:9px 10px; margin-bottom:7px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .row.flagged{ border-color:var(--danger); background:var(--danger-bg); }
+  .row.paid{ border-color:var(--ok); }
   .row .left{ min-width:0; flex:1; }
-  .row .name{
-    font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
+  .row .name{ font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .tags{ margin-top:2px; }
-  .row .tag{
-    display:inline-block; font-size:9px; color:var(--muted);
-    background:var(--card2); border:1px solid var(--border);
-    border-radius:5px; padding:1px 5px; margin-right:4px;
-  }
-  .row .note-preview{
-    font-size:10.5px; color:var(--danger); margin-top:2px;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
+  .row .tag{ display:inline-block; font-size:9px; color:var(--muted); background:var(--card2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; margin-right:4px; }
+  .row .note-preview{ font-size:10.5px; color:var(--danger); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .due{ font-size:10px; color:var(--warn); margin-top:2px; }
   .row .editor{ font-size:9.5px; color:var(--accent); margin-top:2px; }
+  .row .paidline{ font-size:10.5px; color:var(--ok); margin-top:2px; font-weight:600; }
   .row .right{ text-align:right; flex-shrink:0; }
   .row .debt{ font-size:13px; font-weight:700; }
   .row .debt.zero{ color:var(--ok); }
-  .row .badge{ font-size:9px; color:var(--muted); margin-top:2px; }
-  .overlay{
-    position:fixed; inset:0; background:rgba(0,0,0,.55);
-    display:none; align-items:flex-end; z-index:20;
-  }
+  .row .badgetxt{ font-size:9px; color:var(--muted); margin-top:2px; }
+  .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:flex-end; z-index:20; }
   .overlay.show{ display:flex; }
   .sheet{
     background:var(--card); width:100%; border-radius:14px 14px 0 0;
-    padding:14px 14px 18px 14px; max-height:85vh; overflow-y:auto;
+    max-height:88vh; display:flex; flex-direction:column; overflow:hidden;
   }
-  .sheet h2{ font-size:13.5px; margin:0 0 2px 0; }
-  .sheet .sub{ font-size:11px; color:var(--muted); margin-bottom:10px; }
-  .field{ margin-bottom:10px; }
-  .field label{ display:block; font-size:10.5px; color:var(--muted); margin-bottom:4px; }
-  .field textarea, .field input[type=date]{
-    width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; color:var(--text); padding:8px; font-size:12px; font-family:inherit;
-  }
-  .field textarea{ min-height:70px; resize:vertical; }
-  .field input[type=number]{
-    width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; color:var(--text); padding:8px; font-size:13px; font-family:inherit;
-  }
+  .sheet-head{ padding:14px 14px 6px 14px; flex-shrink:0; }
+  .sheet-head h2{ font-size:13.5px; margin:0 0 2px 0; }
+  .sheet-head .sub{ font-size:10.5px; color:var(--muted); }
+  .sheet-body{ padding:8px 14px; overflow-y:auto; flex:1; min-height:0; }
+  .sheet-footer{ padding:10px 14px 16px 14px; flex-shrink:0; border-top:1px solid var(--border); }
+  .field{ margin-bottom:9px; }
+  .field label{ display:block; font-size:10.5px; color:var(--muted); margin-bottom:3px; }
+  .field textarea, .field input[type=date]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:12px; font-family:inherit; }
+  .field textarea{ min-height:52px; resize:vertical; }
+  .field input[type=number]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:13px; font-family:inherit; }
 
   .date-field-wrap{ position:relative; }
-  .date-field{
-    width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; color:var(--text); padding:8px; font-size:12px;
-    cursor:pointer; display:flex; justify-content:space-between; align-items:center;
-  }
+  .date-field{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
   .date-field .placeholder{ color:var(--muted); }
-  .calendar-popup{
-    display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
-    background:var(--card2); border:1px solid var(--border);
-    border-radius:10px; padding:8px; z-index:30; box-shadow:0 8px 24px rgba(0,0,0,.4);
-  }
+  .calendar-popup{ display:none; position:absolute; bottom:calc(100% + 4px); left:0; right:0; background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:8px; z-index:30; box-shadow:0 8px 24px rgba(0,0,0,.4); }
   .calendar-popup.show{ display:block; }
-  .cal-header{
-    display:flex; align-items:center; justify-content:space-between;
-    margin-bottom:6px; font-size:12px; font-weight:600;
-  }
-  .cal-header button{
-    background:none; border:none; color:var(--text); font-size:16px; padding:2px 8px; cursor:pointer;
-  }
-  .cal-weekdays, .cal-grid{
-    display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center;
-  }
+  .cal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-size:12px; font-weight:600; }
+  .cal-header button{ background:none; border:none; color:var(--text); font-size:16px; padding:2px 8px; cursor:pointer; }
+  .cal-weekdays, .cal-grid{ display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center; }
   .cal-weekdays div{ font-size:9px; color:var(--muted); padding:2px 0; }
   .cal-grid div{ font-size:11px; padding:6px 0; border-radius:6px; cursor:pointer; }
-  .cal-grid div.day:hover{ background:var(--card); }
   .cal-grid div.empty{ cursor:default; }
   .cal-grid div.today{ border:1px solid var(--accent); }
   .cal-grid div.selected{ background:var(--accent); color:#fff; font-weight:700; }
   .cal-footer{ display:flex; gap:6px; margin-top:6px; }
-  .cal-footer button{
-    flex:1; background:var(--card); border:1px solid var(--border);
-    color:var(--text); border-radius:6px; padding:6px; font-size:10.5px; cursor:pointer;
-  }
-  .toggle-row{
-    display:flex; align-items:center; justify-content:space-between;
-    background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; padding:8px 10px; margin-bottom:10px;
-  }
+  .cal-footer button{ flex:1; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:6px; font-size:10.5px; cursor:pointer; }
+
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:7px 10px; margin-bottom:9px; }
   .toggle-row span{ font-size:11.5px; }
-  .switch{
-    width:38px; height:21px; background:#3a3f4a; border-radius:12px;
-    position:relative; cursor:pointer; flex-shrink:0;
-  }
+  .switch{ width:36px; height:20px; background:#3a3f4a; border-radius:12px; position:relative; cursor:pointer; flex-shrink:0; }
   .switch.on{ background:var(--danger); }
-  .switch .dot{
-    width:17px; height:17px; background:#fff; border-radius:50%;
-    position:absolute; top:2px; left:2px; transition:left .15s;
-  }
-  .switch.on .dot{ left:19px; }
-  .btn-row{ display:flex; gap:8px; margin-top:4px; }
+  .switch.on.paidsw{ background:var(--ok); }
+  .switch .dot{ width:16px; height:16px; background:#fff; border-radius:50%; position:absolute; top:2px; left:2px; transition:left .15s; }
+  .switch.on .dot{ left:18px; }
+  .paid-amount-row{ display:none; margin-top:8px; }
+  .paid-amount-row.show{ display:block; }
+
+  .btn-row{ display:flex; gap:8px; }
   .btn{ flex:1; border:none; border-radius:8px; padding:10px; font-size:12px; font-weight:600; }
   .btn.save{ background:var(--accent); color:#fff; }
   .btn.close{ background:var(--card2); color:var(--text); border:1px solid var(--border); }
   .btn.delete{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); flex:0 0 auto; padding:10px 12px; }
   .status{ font-size:10.5px; color:var(--muted); text-align:center; padding:4px 0 0 0; }
 
-  #lockScreen{
-    position:fixed; inset:0; background:var(--bg);
-    display:flex; align-items:center; justify-content:center; z-index:50; padding:24px;
-  }
+  #lockScreen{ position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:50; padding:24px; }
   #lockScreen.hidden{ display:none; }
   .lock-box{ width:100%; max-width:280px; text-align:center; }
   .lock-box h2{ font-size:15px; margin:0 0 4px 0; }
   .lock-box p{ font-size:11px; color:var(--muted); margin:0 0 16px 0; }
-  .lock-box input, .lock-box select{
-    width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; color:var(--text); padding:11px; font-size:15px;
-    text-align:center; margin-bottom:10px;
-  }
-  .lock-box button{
-    width:100%; background:var(--accent); color:#fff; border:none;
-    border-radius:8px; padding:11px; font-size:13px; font-weight:600;
-  }
+  .lock-box input, .lock-box select{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:11px; font-size:15px; text-align:center; margin-bottom:10px; }
+  .lock-box button{ width:100%; background:var(--accent); color:#fff; border:none; border-radius:8px; padding:11px; font-size:13px; font-weight:600; }
   .lock-box .err{ color:var(--danger); font-size:11px; margin-top:8px; min-height:14px; }
   #appRoot.locked{ display:none; }
   .hidden{ display:none !important; }
-  .role-btn{
-    width:100%; border:none; border-radius:8px; padding:13px; font-size:13px;
-    font-weight:700; margin-bottom:10px; cursor:pointer;
-  }
+  .role-btn{ width:100%; border:none; border-radius:8px; padding:13px; font-size:13px; font-weight:700; margin-bottom:10px; cursor:pointer; }
   .role-btn.sales{ background:var(--ok); color:#06281a; }
   .role-btn.admin{ background:var(--accent); color:#fff; }
   .role-form p{ font-size:12px; color:var(--text); font-weight:600; margin:0 0 10px 0; }
   .back-link{ display:block; font-size:11px; color:var(--muted); margin-top:8px; text-decoration:none; }
 
-  /* Plaka yonetimi */
   .plaka-list{ margin:6px 0 12px 0; }
-  .plaka-item{
-    display:flex; justify-content:space-between; align-items:center;
-    background:var(--card2); border:1px solid var(--border); border-radius:8px;
-    padding:8px 10px; margin-bottom:6px; font-size:12px;
-  }
-  .plaka-item button{
-    background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);
-    border-radius:6px; padding:4px 9px; font-size:11px; cursor:pointer;
-  }
+  .plaka-item{ display:flex; justify-content:space-between; align-items:center; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:6px; font-size:12px; }
+  .plaka-item button{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); border-radius:6px; padding:4px 9px; font-size:11px; cursor:pointer; }
   .plaka-add-row{ display:flex; gap:6px; }
-  .plaka-add-row input{
-    flex:1; background:var(--card2); border:1px solid var(--border); border-radius:8px;
-    color:var(--text); padding:9px; font-size:12px;
-  }
-  .plaka-add-row button{
-    background:var(--accent); color:#fff; border:none; border-radius:8px;
-    padding:9px 14px; font-size:12px; font-weight:600; cursor:pointer;
-  }
+  .plaka-add-row input{ flex:1; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px; font-size:12px; }
+  .plaka-add-row button{ background:var(--accent); color:#fff; border:none; border-radius:8px; padding:9px 14px; font-size:12px; font-weight:600; cursor:pointer; }
+
+  .review-item{ background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:9px 10px; margin-bottom:7px; }
+  .review-item .rname{ font-size:12px; font-weight:600; }
+  .review-item .rmeta{ font-size:10px; color:var(--muted); margin-top:2px; }
+  .review-item .ramount{ font-size:13px; font-weight:700; color:var(--ok); margin-top:4px; }
+  .review-item .ractions{ display:flex; gap:6px; margin-top:8px; }
+  .review-item .ractions button{ flex:1; border:none; border-radius:6px; padding:7px; font-size:10.5px; font-weight:600; cursor:pointer; }
+  .review-item .ractions .approve{ background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok); }
+  .review-item .ractions .clearnote{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); }
+  .review-item .ractions .cancel{ background:var(--card); color:var(--text); border:1px solid var(--border); }
+
+  .history-item{ background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:6px; }
+  .history-item .hname{ font-size:11.5px; font-weight:600; }
+  .history-item .hmeta{ font-size:9.5px; color:var(--accent); margin-top:2px; }
+  .history-item .hnote{ font-size:10.5px; color:var(--text); margin-top:3px; }
+
+  #nightLock{ position:fixed; inset:0; background:var(--bg); z-index:60; display:none; align-items:center; justify-content:center; padding:28px; text-align:center; }
+  #nightLock.show{ display:flex; }
+  #nightLock .box{ max-width:280px; }
+  #nightLock .icon{ font-size:34px; margin-bottom:10px; }
+  #nightLock h3{ font-size:14px; margin:0 0 8px 0; }
+  #nightLock p{ font-size:12px; color:var(--muted); line-height:1.6; }
 </style>
 </head>
 <body>
@@ -254,21 +171,16 @@
 <div id="lockScreen">
   <div class="lock-box">
     <h2>Cari Takip</h2>
-
     <div id="roleChoice">
       <p style="font-size:11px;color:var(--muted);margin:0 0 14px 0;">Giris turunu secin</p>
       <button type="button" class="role-btn sales" id="roleSalesBtn">Plasiyer Girisi</button>
       <button type="button" class="role-btn admin" id="roleAdminBtn">Yonetici Girisi</button>
     </div>
-
     <div id="salesForm" class="role-form hidden">
       <p>Plasiyer Girisi</p>
-      <select id="salesPlakaSelect">
-        <option value="">Plaka secin...</option>
-      </select>
+      <select id="salesPlakaSelect"><option value="">Plaka secin...</option></select>
       <a href="#" class="back-link" id="salesBack">‹ Geri</a>
     </div>
-
     <div id="adminForm" class="role-form hidden">
       <p>Yonetici Girisi</p>
       <input type="text" id="adminNameInput" placeholder="Adiniz Soyadiniz" autocomplete="name" />
@@ -276,8 +188,15 @@
       <button type="button" id="adminSubmit">Giris</button>
       <a href="#" class="back-link" id="adminBack">‹ Geri</a>
     </div>
-
     <div class="err" id="pinError"></div>
+  </div>
+</div>
+
+<div id="nightLock">
+  <div class="box">
+    <div class="icon">🌙</div>
+    <h3>Gece Kilidi Aktif</h3>
+    <p>Gece 01:00'den sonra veriler kilitlenir.<br/>Lutfen muhasebeden (yoneticilerden) guncel Excel yuklemesini isteyin. Yukleme yapilinca bu ekran otomatik acilacaktir.</p>
   </div>
 </div>
 
@@ -285,9 +204,11 @@
 <div class="topbar">
   <div class="topbar-head">
     <h1>Cari Takip</h1>
-    <button id="hamburgerBtn">☰</button>
+    <button class="icon-btn" id="paymentIconBtn">💰<span class="badge hidden" id="paymentBadge">0</span></button>
+    <button class="icon-btn" id="hamburgerBtn">☰</button>
     <div id="hamburgerMenu" class="hidden">
       <a href="#" id="menuPlakaYonetimi">🚚 Plaka Yonetimi</a>
+      <a href="#" id="menuGecmis">📜 Gecmis</a>
       <a href="#" id="menuLogout" class="danger">🚪 Cikis</a>
     </div>
   </div>
@@ -297,6 +218,7 @@
     <label class="upload-btn" for="fileInput" id="uploadLabel">Excel Yukle (.xlsx)</label>
     <input type="file" id="fileInput" accept=".xlsx,.xls" />
   </div>
+  <div class="required-cols" id="requiredCols"></div>
   <input class="search" id="searchBox" placeholder="Cari ara..." />
   <div class="summary">
     <div class="chip"><span class="n" id="sumCount">0</span><span class="l">Cari</span></div>
@@ -311,74 +233,107 @@
 
 <div class="overlay" id="overlay">
   <div class="sheet">
-    <h2 id="detailName">-</h2>
-    <div class="sub" id="detailEditor">-</div>
-    <div class="sub" id="detailMeta">-</div>
-
-    <div class="field">
-      <label>Kalan Bakiye</label>
-      <input type="number" step="0.01" inputmode="decimal" id="debtInput" />
+    <div class="sheet-head">
+      <h2 id="detailName">-</h2>
+      <div class="sub" id="detailEditor">-</div>
+      <div class="sub" id="detailMeta">-</div>
     </div>
-
-    <div class="toggle-row">
-      <span>Sorunlu / Odeme problemi var</span>
-      <div class="switch" id="flagSwitch"><div class="dot"></div></div>
-    </div>
-
-    <div class="field">
-      <label>Aciklama (not)</label>
-      <textarea id="noteInput" placeholder="Ornek: Musteri 20 Eylulde odeyecegini soyledi, iki kez erteledi."></textarea>
-    </div>
-
-    <div class="field date-field-wrap">
-      <label>Odeme Beklenen Tarih</label>
-      <div class="date-field" id="dueFieldBtn">
-        <span id="dueDisplay" class="placeholder">Tarih secilmedi</span>
-        <span>📅</span>
+    <div class="sheet-body">
+      <div class="field">
+        <label>Kalan Bakiye</label>
+        <input type="number" step="0.01" inputmode="decimal" id="debtInput" />
       </div>
-      <input type="hidden" id="dueInput" />
-      <div class="calendar-popup" id="calendarPopup">
-        <div class="cal-header">
-          <button type="button" id="calPrev">‹</button>
-          <span id="calMonthLabel"></span>
-          <button type="button" id="calNext">›</button>
+
+      <div class="toggle-row">
+        <span>✅ Odeme Alindi</span>
+        <div class="switch" id="paidSwitch"><div class="dot"></div></div>
+      </div>
+      <div class="paid-amount-row field" id="paidAmountRow">
+        <label>Alinan Tutar</label>
+        <input type="number" step="0.01" inputmode="decimal" id="paidAmountInput" placeholder="0.00" />
+      </div>
+
+      <div class="toggle-row">
+        <span>Sorunlu / Odeme problemi var</span>
+        <div class="switch" id="flagSwitch"><div class="dot"></div></div>
+      </div>
+
+      <div class="field">
+        <label>Aciklama (not)</label>
+        <textarea id="noteInput" placeholder="Ornek: Ay basinda odeyecegini soyledi."></textarea>
+      </div>
+
+      <div class="field date-field-wrap">
+        <label>Odeme Beklenen Tarih</label>
+        <div class="date-field" id="dueFieldBtn">
+          <span id="dueDisplay" class="placeholder">Tarih secilmedi</span>
+          <span>📅</span>
         </div>
-        <div class="cal-weekdays">
-          <div>Pt</div><div>Sa</div><div>Ca</div><div>Pe</div><div>Cu</div><div>Ct</div><div>Pz</div>
-        </div>
-        <div class="cal-grid" id="calGrid"></div>
-        <div class="cal-footer">
-          <button type="button" id="calToday">Bugun</button>
-          <button type="button" id="calClear">Temizle</button>
+        <input type="hidden" id="dueInput" />
+        <div class="calendar-popup" id="calendarPopup">
+          <div class="cal-header">
+            <button type="button" id="calPrev">‹</button>
+            <span id="calMonthLabel"></span>
+            <button type="button" id="calNext">›</button>
+          </div>
+          <div class="cal-weekdays"><div>Pt</div><div>Sa</div><div>Ca</div><div>Pe</div><div>Cu</div><div>Ct</div><div>Pz</div></div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div class="cal-footer">
+            <button type="button" id="calToday">Bugun</button>
+            <button type="button" id="calClear">Temizle</button>
+          </div>
         </div>
       </div>
     </div>
-
-    <div class="btn-row">
-      <button class="btn close" id="closeBtn">Kapat</button>
-      <button class="btn delete" id="deleteBtn">Sil</button>
-      <button class="btn save" id="saveBtn">Kaydet</button>
+    <div class="sheet-footer">
+      <div class="btn-row">
+        <button class="btn close" id="closeBtn">Kapat</button>
+        <button class="btn delete" id="deleteBtn">Sil</button>
+        <button class="btn save" id="saveBtn">Kaydet</button>
+      </div>
+      <div class="status" id="saveStatus"></div>
     </div>
-    <div class="status" id="saveStatus"></div>
   </div>
 </div>
 
 <div class="overlay" id="plakaOverlay">
   <div class="sheet">
-    <h2>Plaka Yonetimi</h2>
-    <div class="sub">Buradaki plakalar plasiyer giris ekranindaki dropdown'da gorunur.</div>
-
-    <div class="plaka-list" id="plakaList"></div>
-
-    <div class="plaka-add-row">
-      <input type="text" id="newPlakaInput" placeholder="Yeni plaka, orn: 76AV604" />
-      <button type="button" id="addPlakaBtn">Ekle</button>
+    <div class="sheet-head"><h2>Plaka Yonetimi</h2><div class="sub">Excel'de gecen plakalar otomatik eklenir.</div></div>
+    <div class="sheet-body">
+      <div class="plaka-list" id="plakaList"></div>
+      <div class="plaka-add-row">
+        <input type="text" id="newPlakaInput" placeholder="Yeni plaka, orn: 76AV604" />
+        <button type="button" id="addPlakaBtn">Ekle</button>
+      </div>
     </div>
-
-    <div class="btn-row" style="margin-top:14px;">
-      <button class="btn close" id="closePlakaBtn">Kapat</button>
+    <div class="sheet-footer">
+      <button class="btn close" id="closePlakaBtn" style="width:100%;">Kapat</button>
+      <div class="status" id="plakaStatus"></div>
     </div>
-    <div class="status" id="plakaStatus"></div>
+  </div>
+</div>
+
+<div class="overlay" id="paymentOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Odeme Bildirimleri</h2><div class="sub" id="paymentOverlaySub">Onay bekleyen odeme raporlari</div></div>
+    <div class="sheet-body" id="paymentList"></div>
+    <div class="sheet-footer">
+      <button class="btn close" id="closePaymentBtn" style="width:100%;">Kapat</button>
+      <div class="status" id="paymentStatus"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="historyOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Gecmis Kayitlar</h2><div class="sub">Son 200 duzenleme</div></div>
+    <div class="sheet-body">
+      <input class="search" id="historySearch" placeholder="Cari adina gore ara..." style="margin:0 0 8px 0;" />
+      <div id="historyList"></div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn close" id="closeHistoryBtn" style="width:100%;">Kapat</button>
+    </div>
   </div>
 </div>
 
