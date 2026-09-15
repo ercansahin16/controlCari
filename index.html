@@ -20,9 +20,7 @@
     --warn:#e0a83f;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html, body{
-    touch-action: manipulation; /* cift tiklama/pinch ile yakinlastirmayi engeller */
-  }
+  html, body{ touch-action: manipulation; }
   body{
     margin:0;
     background:var(--bg);
@@ -39,137 +37,110 @@
     padding:10px 12px 8px 12px;
     border-bottom:1px solid var(--border);
   }
-  .topbar h1{
-    font-size:15px; margin:0 0 2px 0; font-weight:700; letter-spacing:.2px;
+  .topbar-head{
+    display:flex; align-items:center; justify-content:space-between;
+    position:relative;
   }
+  .topbar h1{
+    font-size:15px; margin:0; font-weight:700; letter-spacing:.2px;
+  }
+  #hamburgerBtn{
+    background:var(--card); border:1px solid var(--border); color:var(--text);
+    width:30px; height:30px; border-radius:9px; font-size:15px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  #hamburgerMenu{
+    position:absolute; top:36px; right:0; z-index:40;
+    background:var(--card); border:1px solid var(--border);
+    border-radius:10px; min-width:170px;
+    box-shadow:0 10px 28px rgba(0,0,0,.45);
+    overflow:hidden;
+  }
+  #hamburgerMenu.hidden{ display:none; }
+  #hamburgerMenu a{
+    display:block; padding:10px 12px; font-size:12px; color:var(--text);
+    text-decoration:none; border-bottom:1px solid var(--border);
+  }
+  #hamburgerMenu a:last-child{ border-bottom:none; }
+  #hamburgerMenu a:active{ background:var(--card2); }
+  #hamburgerMenu a.danger{ color:var(--danger); }
   #userInfo{
-    font-size:10px; color:var(--muted); margin-bottom:6px;
+    font-size:10px; color:var(--muted); margin:6px 0;
   }
   #userInfo b{ color:var(--text); }
-  #userInfo a{
-    color:var(--accent); text-decoration:none; margin-left:6px;
-  }
   #connStatus{
     font-size:10px; margin:0 0 8px 0; color:var(--warn);
   }
-  .upload-row{
-    display:flex; gap:6px; align-items:center;
-  }
+  .upload-row{ display:flex; gap:6px; align-items:center; }
   .upload-btn{
-    flex:1;
-    background:var(--accent);
-    color:#fff;
-    border:none;
-    border-radius:8px;
-    padding:8px 10px;
-    font-size:12px;
-    font-weight:600;
-    text-align:center;
-    display:block;
+    flex:1; background:var(--accent); color:#fff; border:none; border-radius:8px;
+    padding:8px 10px; font-size:12px; font-weight:600; text-align:center; display:block;
   }
   input[type=file]{ display:none; }
   .search{
-    margin-top:8px;
-    width:100%;
-    background:var(--card2);
-    border:1px solid var(--border);
-    border-radius:8px;
-    padding:7px 9px;
-    color:var(--text);
-    font-size:12px;
+    margin-top:8px; width:100%; background:var(--card2); border:1px solid var(--border);
+    border-radius:8px; padding:7px 9px; color:var(--text); font-size:12px;
   }
-  .summary{
-    display:flex; gap:6px; margin-top:8px;
-  }
+  .summary{ display:flex; gap:6px; margin-top:8px; }
   .chip{
-    flex:1;
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:8px;
-    padding:6px 8px;
-    text-align:center;
+    flex:1; background:var(--card); border:1px solid var(--border);
+    border-radius:8px; padding:6px 8px; text-align:center;
   }
   .chip .n{ font-size:13px; font-weight:700; display:block; }
   .chip .l{ font-size:10px; color:var(--muted); }
   .list{ padding:8px 10px; }
   .empty{
-    color:var(--muted);
-    text-align:center;
-    padding:40px 20px;
-    font-size:12px;
-    line-height:1.6;
+    color:var(--muted); text-align:center; padding:40px 20px; font-size:12px; line-height:1.6;
   }
   .row{
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:10px;
-    padding:9px 10px;
-    margin-bottom:7px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:8px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:9px 10px; margin-bottom:7px; display:flex; justify-content:space-between;
+    align-items:center; gap:8px;
   }
-  .row.flagged{
-    border-color:var(--danger);
-    background:var(--danger-bg);
-  }
+  .row.flagged{ border-color:var(--danger); background:var(--danger-bg); }
   .row .left{ min-width:0; flex:1; }
   .row .name{
-    font-size:12.5px; font-weight:600;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .row .tags{ margin-top:2px; }
+  .row .tag{
+    display:inline-block; font-size:9px; color:var(--muted);
+    background:var(--card2); border:1px solid var(--border);
+    border-radius:5px; padding:1px 5px; margin-right:4px;
   }
   .row .note-preview{
-    font-size:10.5px; color:var(--danger);
-    margin-top:2px;
+    font-size:10.5px; color:var(--danger); margin-top:2px;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
-  .row .due{
-    font-size:10px; color:var(--warn); margin-top:2px;
-  }
-  .row .editor{
-    font-size:9.5px; color:var(--accent); margin-top:2px;
-  }
-  .row .right{
-    text-align:right; flex-shrink:0;
-  }
-  .row .debt{
-    font-size:13px; font-weight:700;
-  }
+  .row .due{ font-size:10px; color:var(--warn); margin-top:2px; }
+  .row .editor{ font-size:9.5px; color:var(--accent); margin-top:2px; }
+  .row .right{ text-align:right; flex-shrink:0; }
+  .row .debt{ font-size:13px; font-weight:700; }
   .row .debt.zero{ color:var(--ok); }
-  .row .badge{
-    font-size:9px; color:var(--muted); margin-top:2px;
-  }
+  .row .badge{ font-size:9px; color:var(--muted); margin-top:2px; }
   .overlay{
     position:fixed; inset:0; background:rgba(0,0,0,.55);
     display:none; align-items:flex-end; z-index:20;
   }
   .overlay.show{ display:flex; }
   .sheet{
-    background:var(--card); width:100%;
-    border-radius:14px 14px 0 0;
-    padding:14px 14px 18px 14px;
-    max-height:85vh; overflow-y:auto;
+    background:var(--card); width:100%; border-radius:14px 14px 0 0;
+    padding:14px 14px 18px 14px; max-height:85vh; overflow-y:auto;
   }
   .sheet h2{ font-size:13.5px; margin:0 0 2px 0; }
   .sheet .sub{ font-size:11px; color:var(--muted); margin-bottom:10px; }
   .field{ margin-bottom:10px; }
-  .field label{
-    display:block; font-size:10.5px; color:var(--muted); margin-bottom:4px;
-  }
+  .field label{ display:block; font-size:10.5px; color:var(--muted); margin-bottom:4px; }
   .field textarea, .field input[type=date]{
     width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; color:var(--text); padding:8px; font-size:12px;
-    font-family:inherit;
+    border-radius:8px; color:var(--text); padding:8px; font-size:12px; font-family:inherit;
   }
   .field textarea{ min-height:70px; resize:vertical; }
   .field input[type=number]{
     width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; color:var(--text); padding:8px; font-size:13px;
-    font-family:inherit;
+    border-radius:8px; color:var(--text); padding:8px; font-size:13px; font-family:inherit;
   }
 
-  /* Ozel tarih secici */
   .date-field-wrap{ position:relative; }
   .date-field{
     width:100%; background:var(--card2); border:1px solid var(--border);
@@ -178,11 +149,9 @@
   }
   .date-field .placeholder{ color:var(--muted); }
   .calendar-popup{
-    display:none;
-    position:absolute; top:calc(100% + 4px); left:0; right:0;
+    display:none; position:absolute; top:calc(100% + 4px); left:0; right:0;
     background:var(--card2); border:1px solid var(--border);
-    border-radius:10px; padding:8px; z-index:30;
-    box-shadow:0 8px 24px rgba(0,0,0,.4);
+    border-radius:10px; padding:8px; z-index:30; box-shadow:0 8px 24px rgba(0,0,0,.4);
   }
   .calendar-popup.show{ display:block; }
   .cal-header{
@@ -190,23 +159,18 @@
     margin-bottom:6px; font-size:12px; font-weight:600;
   }
   .cal-header button{
-    background:none; border:none; color:var(--text); font-size:16px;
-    padding:2px 8px; cursor:pointer;
+    background:none; border:none; color:var(--text); font-size:16px; padding:2px 8px; cursor:pointer;
   }
   .cal-weekdays, .cal-grid{
     display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; text-align:center;
   }
   .cal-weekdays div{ font-size:9px; color:var(--muted); padding:2px 0; }
-  .cal-grid div{
-    font-size:11px; padding:6px 0; border-radius:6px; cursor:pointer;
-  }
+  .cal-grid div{ font-size:11px; padding:6px 0; border-radius:6px; cursor:pointer; }
   .cal-grid div.day:hover{ background:var(--card); }
   .cal-grid div.empty{ cursor:default; }
   .cal-grid div.today{ border:1px solid var(--accent); }
   .cal-grid div.selected{ background:var(--accent); color:#fff; font-weight:700; }
-  .cal-footer{
-    display:flex; gap:6px; margin-top:6px;
-  }
+  .cal-footer{ display:flex; gap:6px; margin-top:6px; }
   .cal-footer button{
     flex:1; background:var(--card); border:1px solid var(--border);
     color:var(--text); border-radius:6px; padding:6px; font-size:10.5px; cursor:pointer;
@@ -228,31 +192,24 @@
   }
   .switch.on .dot{ left:19px; }
   .btn-row{ display:flex; gap:8px; margin-top:4px; }
-  .btn{
-    flex:1; border:none; border-radius:8px; padding:10px; font-size:12px;
-    font-weight:600;
-  }
+  .btn{ flex:1; border:none; border-radius:8px; padding:10px; font-size:12px; font-weight:600; }
   .btn.save{ background:var(--accent); color:#fff; }
   .btn.close{ background:var(--card2); color:var(--text); border:1px solid var(--border); }
   .btn.delete{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); flex:0 0 auto; padding:10px 12px; }
-  .status{
-    font-size:10.5px; color:var(--muted); text-align:center; padding:4px 0 0 0;
-  }
+  .status{ font-size:10.5px; color:var(--muted); text-align:center; padding:4px 0 0 0; }
 
-  /* Kilit ekrani */
   #lockScreen{
     position:fixed; inset:0; background:var(--bg);
-    display:flex; align-items:center; justify-content:center;
-    z-index:50; padding:24px;
+    display:flex; align-items:center; justify-content:center; z-index:50; padding:24px;
   }
   #lockScreen.hidden{ display:none; }
   .lock-box{ width:100%; max-width:280px; text-align:center; }
   .lock-box h2{ font-size:15px; margin:0 0 4px 0; }
   .lock-box p{ font-size:11px; color:var(--muted); margin:0 0 16px 0; }
-  .lock-box input{
+  .lock-box input, .lock-box select{
     width:100%; background:var(--card2); border:1px solid var(--border);
-    border-radius:8px; color:var(--text); padding:11px; font-size:16px;
-    text-align:center; letter-spacing:4px; margin-bottom:10px;
+    border-radius:8px; color:var(--text); padding:11px; font-size:15px;
+    text-align:center; margin-bottom:10px;
   }
   .lock-box button{
     width:100%; background:var(--accent); color:#fff; border:none;
@@ -268,14 +225,27 @@
   .role-btn.sales{ background:var(--ok); color:#06281a; }
   .role-btn.admin{ background:var(--accent); color:#fff; }
   .role-form p{ font-size:12px; color:var(--text); font-weight:600; margin:0 0 10px 0; }
-  .back-link{
-    display:block; font-size:11px; color:var(--muted); margin-top:8px; text-decoration:none;
+  .back-link{ display:block; font-size:11px; color:var(--muted); margin-top:8px; text-decoration:none; }
+
+  /* Plaka yonetimi */
+  .plaka-list{ margin:6px 0 12px 0; }
+  .plaka-item{
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--card2); border:1px solid var(--border); border-radius:8px;
+    padding:8px 10px; margin-bottom:6px; font-size:12px;
   }
-  .row .tags{ margin-top:2px; }
-  .row .tag{
-    display:inline-block; font-size:9px; color:var(--muted);
-    background:var(--card2); border:1px solid var(--border);
-    border-radius:5px; padding:1px 5px; margin-right:4px;
+  .plaka-item button{
+    background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger);
+    border-radius:6px; padding:4px 9px; font-size:11px; cursor:pointer;
+  }
+  .plaka-add-row{ display:flex; gap:6px; }
+  .plaka-add-row input{
+    flex:1; background:var(--card2); border:1px solid var(--border); border-radius:8px;
+    color:var(--text); padding:9px; font-size:12px;
+  }
+  .plaka-add-row button{
+    background:var(--accent); color:#fff; border:none; border-radius:8px;
+    padding:9px 14px; font-size:12px; font-weight:600; cursor:pointer;
   }
 </style>
 </head>
@@ -293,10 +263,9 @@
 
     <div id="salesForm" class="role-form hidden">
       <p>Plasiyer Girisi</p>
-      <input type="text" id="salesNameInput" placeholder="Adiniz Soyadiniz" autocomplete="name" />
-      <input type="text" id="salesPlakaInput" placeholder="Plaka(lariniz) - virgulle ayirin" />
-      <input type="password" inputmode="numeric" id="salesPinInput" placeholder="PIN" maxlength="12" />
-      <button type="button" id="salesSubmit">Giris</button>
+      <select id="salesPlakaSelect">
+        <option value="">Plaka secin...</option>
+      </select>
       <a href="#" class="back-link" id="salesBack">‹ Geri</a>
     </div>
 
@@ -314,7 +283,14 @@
 
 <div id="appRoot" class="locked">
 <div class="topbar">
-  <h1>Cari Takip</h1>
+  <div class="topbar-head">
+    <h1>Cari Takip</h1>
+    <button id="hamburgerBtn">☰</button>
+    <div id="hamburgerMenu" class="hidden">
+      <a href="#" id="menuPlakaYonetimi">🚚 Plaka Yonetimi</a>
+      <a href="#" id="menuLogout" class="danger">🚪 Cikis</a>
+    </div>
+  </div>
   <div id="userInfo">-</div>
   <div id="connStatus">Baglaniyor...</div>
   <div class="upload-row" id="uploadRow">
@@ -384,6 +360,25 @@
       <button class="btn save" id="saveBtn">Kaydet</button>
     </div>
     <div class="status" id="saveStatus"></div>
+  </div>
+</div>
+
+<div class="overlay" id="plakaOverlay">
+  <div class="sheet">
+    <h2>Plaka Yonetimi</h2>
+    <div class="sub">Buradaki plakalar plasiyer giris ekranindaki dropdown'da gorunur.</div>
+
+    <div class="plaka-list" id="plakaList"></div>
+
+    <div class="plaka-add-row">
+      <input type="text" id="newPlakaInput" placeholder="Yeni plaka, orn: 76AV604" />
+      <button type="button" id="addPlakaBtn">Ekle</button>
+    </div>
+
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn close" id="closePlakaBtn">Kapat</button>
+    </div>
+    <div class="status" id="plakaStatus"></div>
   </div>
 </div>
 
