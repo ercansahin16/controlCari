@@ -260,6 +260,23 @@
   }
   .lock-box .err{ color:var(--danger); font-size:11px; margin-top:8px; min-height:14px; }
   #appRoot.locked{ display:none; }
+  .hidden{ display:none !important; }
+  .role-btn{
+    width:100%; border:none; border-radius:8px; padding:13px; font-size:13px;
+    font-weight:700; margin-bottom:10px; cursor:pointer;
+  }
+  .role-btn.sales{ background:var(--ok); color:#06281a; }
+  .role-btn.admin{ background:var(--accent); color:#fff; }
+  .role-form p{ font-size:12px; color:var(--text); font-weight:600; margin:0 0 10px 0; }
+  .back-link{
+    display:block; font-size:11px; color:var(--muted); margin-top:8px; text-decoration:none;
+  }
+  .row .tags{ margin-top:2px; }
+  .row .tag{
+    display:inline-block; font-size:9px; color:var(--muted);
+    background:var(--card2); border:1px solid var(--border);
+    border-radius:5px; padding:1px 5px; margin-right:4px;
+  }
 </style>
 </head>
 <body>
@@ -267,10 +284,30 @@
 <div id="lockScreen">
   <div class="lock-box">
     <h2>Cari Takip</h2>
-    <p>Devam etmek icin isminizi ve PIN'i girin</p>
-    <input type="text" id="nameInput" placeholder="Adiniz Soyadiniz" autocomplete="name" />
-    <input type="password" inputmode="numeric" id="pinInput" placeholder="••••" maxlength="12" />
-    <button id="pinSubmit">Giris</button>
+
+    <div id="roleChoice">
+      <p style="font-size:11px;color:var(--muted);margin:0 0 14px 0;">Giris turunu secin</p>
+      <button type="button" class="role-btn sales" id="roleSalesBtn">Plasiyer Girisi</button>
+      <button type="button" class="role-btn admin" id="roleAdminBtn">Yonetici Girisi</button>
+    </div>
+
+    <div id="salesForm" class="role-form hidden">
+      <p>Plasiyer Girisi</p>
+      <input type="text" id="salesNameInput" placeholder="Adiniz Soyadiniz" autocomplete="name" />
+      <input type="text" id="salesPlakaInput" placeholder="Plaka(lariniz) - virgulle ayirin" />
+      <input type="password" inputmode="numeric" id="salesPinInput" placeholder="PIN" maxlength="12" />
+      <button type="button" id="salesSubmit">Giris</button>
+      <a href="#" class="back-link" id="salesBack">‹ Geri</a>
+    </div>
+
+    <div id="adminForm" class="role-form hidden">
+      <p>Yonetici Girisi</p>
+      <input type="text" id="adminNameInput" placeholder="Adiniz Soyadiniz" autocomplete="name" />
+      <input type="password" inputmode="numeric" id="adminPinInput" placeholder="PIN" maxlength="12" />
+      <button type="button" id="adminSubmit">Giris</button>
+      <a href="#" class="back-link" id="adminBack">‹ Geri</a>
+    </div>
+
     <div class="err" id="pinError"></div>
   </div>
 </div>
@@ -278,9 +315,9 @@
 <div id="appRoot" class="locked">
 <div class="topbar">
   <h1>Cari Takip</h1>
-  <div id="userInfo">Kullanici: <b id="userNameLabel">-</b><a href="#" id="changeUserLink">degistir</a></div>
+  <div id="userInfo">-</div>
   <div id="connStatus">Baglaniyor...</div>
-  <div class="upload-row">
+  <div class="upload-row" id="uploadRow">
     <label class="upload-btn" for="fileInput" id="uploadLabel">Excel Yukle (.xlsx)</label>
     <input type="file" id="fileInput" accept=".xlsx,.xls" />
   </div>
@@ -293,13 +330,14 @@
 </div>
 
 <div class="list" id="list">
-  <div class="empty">Henuz veri yok.<br/>Yukaridan bir Excel dosyasi yukleyin.<br/>Excel'de "Cari Ismi" ve bakiye/borc kolonu olmali.</div>
+  <div class="empty">Henuz veri yok.<br/>Yukaridan bir Excel dosyasi yukleyin.</div>
 </div>
 
 <div class="overlay" id="overlay">
   <div class="sheet">
     <h2 id="detailName">-</h2>
     <div class="sub" id="detailEditor">-</div>
+    <div class="sub" id="detailMeta">-</div>
 
     <div class="field">
       <label>Kalan Bakiye</label>
