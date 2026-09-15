@@ -1,4 +1,4 @@
-// app.js — Cari Takip uygulama mantigi (Firestore + rol bazli giris)
+// app.js — Cari Takip uygulama mantigi (Firestore + rol bazli giris + plaka yonetimi)
 
 import { db } from "./firebase-core.js";
 import {
@@ -7,32 +7,35 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-// ---- PIN ayarlari ----
-// BURALARI DEGISTIR: yonetici ve plasiyer icin FARKLI PIN kullanmani
-// oneririm, boylece plasiyerler yonetici girisini deneyip veri
-// yukleme/silme yetkisine ulasamaz. Bu sadece ekrani gizler, gercek
+// ---- Yonetici PIN'i ----
+// BURAYI DEGISTIR: kendi PIN'ini yaz. Bu sadece ekrani gizler, gercek
 // bir guvenlik degildir (sayfa kaynagina bakan gorebilir).
 const ADMIN_PIN = "1234";
-const SALES_PIN = "5678";
 
-const UNLOCK_KEY = "cariTakip_unlocked_v2";
-const ROLE_KEY = "cariTakip_role_v2";       // "admin" | "sales"
-const USERNAME_KEY = "cariTakip_userName_v2";
-const PLAKALAR_KEY = "cariTakip_plakalar_v2"; // plasiyerin plakalari, virgulle ayrilmis
+const UNLOCK_KEY = "cariTakip_unlocked_v3";
+const ROLE_KEY = "cariTakip_role_v3";       // "admin" | "sales"
+const USERNAME_KEY = "cariTakip_userName_v3";
+const PLAKA_KEY = "cariTakip_plaka_v3";     // plasiyerin sectigi tek plaka
 
 const COLLECTION_NAME = "cariler";
-var cariCollection = null;
+const PLAKA_CONFIG_COLLECTION = "config";
+const PLAKA_CONFIG_DOC = "plakalar";
 
-var cariler = [];        // Firestore'dan gelen TAM liste (rol filtresi uygulanmamis)
+var cariCollection = null;
+var plakaDocRef = null;
+
+var cariler = [];
+var plakaListesi = []; // yonetici tarafindan tanimlanan gecerli plakalar
 var currentDocId = null;
 var currentUserName = "";
 var currentRole = "";        // "admin" | "sales"
-var currentPlakalar = [];    // plasiyerin normalize edilmis plaka listesi
+var currentPlakalar = [];    // plasiyerin secili plakasi (tek elemanli dizi)
 
-// ---- Ozel takvim durumu ----
 var calViewYear, calViewMonth;
 var calSelectedISO = "";
 
@@ -109,6 +112,91 @@ function setConnStatus(text, ok){
   el.style.color = ok ? "var(--ok)" : "var(--warn)";
 }
 
+// ---------- Plaka konfigurasyonu (herkes icin, sayfa acilir acilmaz dinlenir) ----------
+
+function watchPlakaConfig(){
+  try {
+    plakaDocRef = doc(db, PLAKA_CONFIG_COLLECTION, PLAKA_CONFIG_DOC);
+    onSnapshot(plakaDocRef, function(snap){
+      var data = snap.exists() ? snap.data() : {};
+      plakaListesi = Array.isArray(data.list) ? data.list.slice() : [];
+      plakaListesi.sort(function(a, b){ return a.localeCompare(b, "tr"); });
+      populateSalesDropdown();
+      renderPlakaManagementList();
+    }, function(err){
+      console.error("[cariTakip] plaka config dinlenemedi:", err);
+    });
+  } catch (e) {
+    console.error("[cariTakip] plaka config baglanamadi:", e);
+  }
+}
+
+function populateSalesDropdown(){
+  var sel = document.getElementById("salesPlakaSelect");
+  if (!sel) return;
+  var current = sel.value;
+  sel.innerHTML = '<option value="">Plaka secin...</option>';
+  plakaListesi.forEach(function(p){
+    var opt = document.createElement("option");
+    opt.value = p;
+    opt.textContent = p;
+    sel.appendChild(opt);
+  });
+  if (current && plakaListesi.indexOf(current) !== -1) sel.value = current;
+}
+
+async function addPlaka(){
+  var input = document.getElementById("newPlakaInput");
+  var status = document.getElementById("plakaStatus");
+  var val = input.value.trim();
+  if (!val){ status.textContent = "Plaka bos olamaz."; return; }
+
+  var norm = normalizePlate(val);
+  var exists = plakaListesi.some(function(p){ return normalizePlate(p) === norm; });
+  if (exists){ status.textContent = "Bu plaka zaten listede."; return; }
+
+  status.textContent = "Ekleniyor...";
+  try {
+    await setDoc(plakaDocRef, { list: arrayUnion(val.toUpperCase().replace(/\s+/g, "")) }, { merge: true });
+    input.value = "";
+    status.textContent = "Eklendi.";
+  } catch (e) {
+    status.textContent = "Eklenemedi: " + e.message;
+  }
+}
+
+async function removePlaka(plaka){
+  if (!confirm('"' + plaka + '" plakasini listeden kaldirmak istediginize emin misiniz?')) return;
+  var status = document.getElementById("plakaStatus");
+  status.textContent = "Kaldiriliyor...";
+  try {
+    await setDoc(plakaDocRef, { list: arrayRemove(plaka) }, { merge: true });
+    status.textContent = "Kaldirildi.";
+  } catch (e) {
+    status.textContent = "Kaldirilamadi: " + e.message;
+  }
+}
+
+function renderPlakaManagementList(){
+  var container = document.getElementById("plakaList");
+  if (!container) return;
+  if (plakaListesi.length === 0){
+    container.innerHTML = '<div class="empty" style="padding:16px;">Henuz plaka eklenmemis.</div>';
+    return;
+  }
+  var html = "";
+  for (var i = 0; i < plakaListesi.length; i++){
+    var p = plakaListesi[i];
+    html += '<div class="plaka-item"><span>' + escapeHtml(p) + '</span><button type="button" data-plaka="' + escapeAttr(p) + '">Kaldir</button></div>';
+  }
+  container.innerHTML = html;
+  container.querySelectorAll("button[data-plaka]").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      removePlaka(btn.getAttribute("data-plaka"));
+    });
+  });
+}
+
 // ---------- Rol bazli gorunur liste ----------
 
 function getVisibleCariler(){
@@ -133,7 +221,7 @@ function render(){
 
   if (visible.length === 0){
     if (currentRole === "sales"){
-      list.innerHTML = '<div class="empty">Plakaniza atanmis cari bulunamadi.<br/>Plakalarinizi kontrol edin veya yoneticinizle iletisime gecin.</div>';
+      list.innerHTML = '<div class="empty">Bu plakaya atanmis cari bulunamadi.<br/>Excelde bu plaka icin cari kategori 5 alani doldurulunca burada gorunecek.</div>';
     } else {
       list.innerHTML = '<div class="empty">Henuz veri yok.<br/>Yukaridan bir Excel dosyasi yukleyin.</div>';
     }
@@ -343,6 +431,11 @@ function closeDetail(){
   currentDocId = null;
 }
 
+function editorLabel(){
+  if (currentRole === "admin") return currentUserName + " (yonetici)";
+  return (currentPlakalar[0] || "?") + " (plasiyer)";
+}
+
 async function saveCurrentNote(){
   if (!currentDocId) return;
   var status = document.getElementById("saveStatus");
@@ -354,7 +447,7 @@ async function saveCurrentNote(){
     note: document.getElementById("noteInput").value,
     due: document.getElementById("dueInput").value,
     flagged: document.getElementById("flagSwitch").classList.contains("on"),
-    lastEditedBy: currentUserName + (currentRole === "sales" ? " (plasiyer)" : " (yonetici)"),
+    lastEditedBy: editorLabel(),
     updatedAt: serverTimestamp(),
     lastEditedAt: serverTimestamp()
   };
@@ -418,6 +511,7 @@ async function handleExcelUpload(file){
     label.textContent = "Yukleniyor 0/" + (rows.length - 1);
     var count = 0;
     var total = rows.length - 1;
+    var yeniPlakalar = {};
 
     for (var i = 1; i < rows.length; i++){
       var r = rows[i];
@@ -431,7 +525,6 @@ async function handleExcelUpload(file){
 
       var id = kod ? docIdFor(kod) : docIdFor(nm);
 
-      // merge:true -> mevcut not/tarih/sorunlu/duzenleyen bilgisi silinmez
       await setDoc(doc(db, COLLECTION_NAME, id), {
         name: nm,
         kod: kod,
@@ -441,8 +534,24 @@ async function handleExcelUpload(file){
         updatedAt: serverTimestamp()
       }, { merge: true });
 
+      if (plaka) yeniPlakalar[normalizePlate(plaka)] = plaka.toUpperCase().replace(/\s+/g, "");
+
       count++;
       label.textContent = "Yukleniyor " + count + "/" + total;
+    }
+
+    // Excel'deki plakalari otomatik olarak plaka listesine ekle (plasiyer dropdown'inda gorunsun diye)
+    var mevcutNorm = plakaListesi.map(function(p){ return normalizePlate(p); });
+    var eklenecekler = [];
+    Object.keys(yeniPlakalar).forEach(function(norm){
+      if (mevcutNorm.indexOf(norm) === -1) eklenecekler.push(yeniPlakalar[norm]);
+    });
+    if (eklenecekler.length > 0 && plakaDocRef){
+      try {
+        await setDoc(plakaDocRef, { list: arrayUnion.apply(null, eklenecekler) }, { merge: true });
+      } catch (e) {
+        console.error("[cariTakip] plaka listesi guncellenemedi:", e);
+      }
     }
 
     label.textContent = "Excel Yukle (.xlsx)";
@@ -452,7 +561,7 @@ async function handleExcelUpload(file){
   }
 }
 
-// ---------- Firestore canli baglanti ----------
+// ---------- Firestore canli baglanti (cariler) ----------
 
 function initRealtime(){
   setConnStatus("Baglaniyor...", false);
@@ -487,6 +596,56 @@ function initRealtime(){
   }
 }
 
+// ---------- Hamburger menu ----------
+
+function wireHamburger(){
+  var btn = document.getElementById("hamburgerBtn");
+  var menu = document.getElementById("hamburgerMenu");
+
+  btn.addEventListener("click", function(e){
+    e.stopPropagation();
+    menu.classList.toggle("hidden");
+  });
+  document.addEventListener("click", function(e){
+    if (!menu.contains(e.target) && e.target !== btn){
+      menu.classList.add("hidden");
+    }
+  });
+
+  document.getElementById("menuLogout").addEventListener("click", function(e){
+    e.preventDefault();
+    logout();
+  });
+
+  document.getElementById("menuPlakaYonetimi").addEventListener("click", function(e){
+    e.preventDefault();
+    menu.classList.add("hidden");
+    if (currentRole !== "admin"){
+      alert("Plaka yonetimi sadece yoneticiler icindir.");
+      return;
+    }
+    renderPlakaManagementList();
+    document.getElementById("plakaStatus").textContent = "";
+    document.getElementById("plakaOverlay").classList.add("show");
+  });
+
+  document.getElementById("closePlakaBtn").addEventListener("click", function(){
+    document.getElementById("plakaOverlay").classList.remove("show");
+  });
+  document.getElementById("plakaOverlay").addEventListener("click", function(e){
+    if (e.target === this) this.classList.remove("show");
+  });
+  document.getElementById("addPlakaBtn").addEventListener("click", addPlaka);
+  document.getElementById("newPlakaInput").addEventListener("keydown", function(e){
+    if (e.key === "Enter") addPlaka();
+  });
+
+  // plasiyer rolunde plaka yonetimi menu ogesini gizle
+  if (currentRole !== "admin"){
+    document.getElementById("menuPlakaYonetimi").classList.add("hidden");
+  }
+}
+
 // ---------- Olay baglama ----------
 
 function wireEvents(){
@@ -506,6 +665,7 @@ function wireEvents(){
     e.target.value = "";
   });
   wireCalendar();
+  wireHamburger();
 }
 
 function logout(){
@@ -513,7 +673,7 @@ function logout(){
     localStorage.removeItem(UNLOCK_KEY);
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem(USERNAME_KEY);
-    localStorage.removeItem(PLAKALAR_KEY);
+    localStorage.removeItem(PLAKA_KEY);
   } catch (e) {}
   location.reload();
 }
@@ -526,21 +686,16 @@ function applyRoleUI(){
   if (currentRole === "admin"){
     uploadRow.classList.remove("hidden");
     deleteBtn.classList.remove("hidden");
-    userInfo.innerHTML = 'Yonetici: <b>' + escapeHtml(currentUserName) + '</b> <a href="#" id="logoutLink">cikis</a>';
+    userInfo.innerHTML = 'Yonetici: <b>' + escapeHtml(currentUserName) + '</b>';
   } else {
     uploadRow.classList.add("hidden");
     deleteBtn.classList.add("hidden");
-    var plakaText = currentPlakalar.join(", ");
-    userInfo.innerHTML = 'Plasiyer: <b>' + escapeHtml(currentUserName) + '</b> (' + escapeHtml(plakaText) + ') <a href="#" id="logoutLink">cikis</a>';
+    userInfo.innerHTML = 'Plasiyer: <b>' + escapeHtml(currentPlakalar[0] || "") + '</b>';
   }
-  document.getElementById("logoutLink").addEventListener("click", function(e){
-    e.preventDefault();
-    logout();
-  });
 }
 
 function unlockApp(){
-  console.log("[cariTakip] Kilit aciliyor. Rol:", currentRole, "Kullanici:", currentUserName, "Plakalar:", currentPlakalar);
+  console.log("[cariTakip] Kilit aciliyor. Rol:", currentRole, "Kullanici:", currentUserName, "Plaka:", currentPlakalar);
   document.getElementById("lockScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("locked");
   applyRoleUI();
@@ -562,16 +717,7 @@ function showSalesForm(){
   document.getElementById("salesForm").classList.remove("hidden");
   document.getElementById("adminForm").classList.add("hidden");
   document.getElementById("pinError").textContent = "";
-
-  var savedName = "";
-  var savedPlakalar = "";
-  try {
-    savedName = localStorage.getItem(USERNAME_KEY) || "";
-    savedPlakalar = localStorage.getItem(PLAKALAR_KEY) || "";
-  } catch (e) {}
-  if (savedName) document.getElementById("salesNameInput").value = savedName;
-  if (savedPlakalar) document.getElementById("salesPlakaInput").value = savedPlakalar;
-  document.getElementById("salesNameInput").focus();
+  populateSalesDropdown();
 }
 
 function showAdminForm(){
@@ -586,27 +732,16 @@ function showAdminForm(){
   document.getElementById("adminNameInput").focus();
 }
 
-function trySalesLogin(){
-  var err = document.getElementById("pinError");
-  var nm = document.getElementById("salesNameInput").value.trim();
-  var plakaRaw = document.getElementById("salesPlakaInput").value.trim();
-  var pin = document.getElementById("salesPinInput").value;
-
-  if (!nm){ err.textContent = "Lutfen isminizi girin."; return; }
-  if (!plakaRaw){ err.textContent = "Lutfen en az bir plaka girin."; return; }
-  if (pin !== SALES_PIN){ err.textContent = "Yanlis PIN."; document.getElementById("salesPinInput").value = ""; return; }
-
-  var plakalar = plakaRaw.split(",").map(function(p){ return normalizePlate(p); }).filter(function(p){ return p; });
-
-  currentUserName = nm;
+function trySalesLogin(plaka){
+  if (!plaka) return;
   currentRole = "sales";
-  currentPlakalar = plakalar;
+  currentPlakalar = [normalizePlate(plaka)];
+  currentUserName = "";
 
   try {
     localStorage.setItem(UNLOCK_KEY, "1");
     localStorage.setItem(ROLE_KEY, "sales");
-    localStorage.setItem(USERNAME_KEY, nm);
-    localStorage.setItem(PLAKALAR_KEY, plakaRaw);
+    localStorage.setItem(PLAKA_KEY, plaka);
   } catch (e) {}
 
   unlockApp();
@@ -639,12 +774,11 @@ function wireLoginScreen(){
   document.getElementById("salesBack").addEventListener("click", function(e){ e.preventDefault(); showRoleChoice(); });
   document.getElementById("adminBack").addEventListener("click", function(e){ e.preventDefault(); showRoleChoice(); });
 
-  document.getElementById("salesSubmit").addEventListener("click", trySalesLogin);
-  document.getElementById("adminSubmit").addEventListener("click", tryAdminLogin);
-
-  document.getElementById("salesPinInput").addEventListener("keydown", function(e){
-    if (e.key === "Enter") trySalesLogin();
+  document.getElementById("salesPlakaSelect").addEventListener("change", function(){
+    trySalesLogin(this.value);
   });
+
+  document.getElementById("adminSubmit").addEventListener("click", tryAdminLogin);
   document.getElementById("adminPinInput").addEventListener("keydown", function(e){
     if (e.key === "Enter") tryAdminLogin();
   });
@@ -652,26 +786,29 @@ function wireLoginScreen(){
 
 // ---------- Baslangic ----------
 
+watchPlakaConfig(); // plaka listesini sayfa acilir acilmaz dinlemeye basla (giris ekrani icin de gerekli)
+
 var alreadyUnlocked = false;
 var savedRole = "";
 var savedUserName = "";
-var savedPlakalarRaw = "";
+var savedPlaka = "";
 try {
   alreadyUnlocked = localStorage.getItem(UNLOCK_KEY) === "1";
   savedRole = localStorage.getItem(ROLE_KEY) || "";
   savedUserName = localStorage.getItem(USERNAME_KEY) || "";
-  savedPlakalarRaw = localStorage.getItem(PLAKALAR_KEY) || "";
+  savedPlaka = localStorage.getItem(PLAKA_KEY) || "";
 } catch (e) {}
 
 console.log("[cariTakip] app.js yuklendi. alreadyUnlocked =", alreadyUnlocked, "rol =", savedRole);
 
 wireLoginScreen();
 
-if (alreadyUnlocked && savedUserName && (savedRole === "admin" || savedRole === "sales")){
+if (alreadyUnlocked && savedRole === "admin" && savedUserName){
   currentUserName = savedUserName;
-  currentRole = savedRole;
-  if (savedRole === "sales"){
-    currentPlakalar = savedPlakalarRaw.split(",").map(function(p){ return normalizePlate(p); }).filter(function(p){ return p; });
-  }
+  currentRole = "admin";
+  unlockApp();
+} else if (alreadyUnlocked && savedRole === "sales" && savedPlaka){
+  currentRole = "sales";
+  currentPlakalar = [normalizePlate(savedPlaka)];
   unlockApp();
 }
