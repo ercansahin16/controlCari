@@ -3,7 +3,7 @@
 
 import { db } from "./firebase-core.js";
 import {
-  collection, doc, setDoc, onSnapshot,
+  collection, doc, setDoc, onSnapshot, getDoc,
   serverTimestamp, arrayUnion, arrayRemove,
   query, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
@@ -21,7 +21,8 @@ const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
 const SOFOR_DOC = { col: "config", id: "soforler" };
-const BASARI_DOC = { col: "config", id: "gunluk_basari" };
+const BASARI_DOC = { col: "config", id: "gunluk_basari" }; // artik kullanilmiyor (gecmis uyumluluk icin birakildi)
+const GUNLUK_BAKIYE_COLLECTION = "gunluk_bakiye"; // her takvim gunu icin plaka -> toplam bakiye
 const PLAKA_YOK = "PLAKA_YOK";
 
 // Excelde bulunmasi zorunlu (sadece bunlar) kolonlar
@@ -35,13 +36,11 @@ const REQUIRED_COLUMNS = [
 var plakaDocRef = null;
 var metaDocRef = null;
 var soforDocRef = null;
-var basariDocRef = null;
 
 var cariler = [];
 var plakaListesi = [];
 var soforMap = {}; // plaka -> isim
 var lastUploadAt = null;
-var basariData = null;
 
 var currentDocId = null;
 var currentUserName = "";
@@ -156,14 +155,50 @@ function watchSofor(){
   } catch (e) { console.error("[cariTakip] sofor baglanamadi:", e); }
 }
 
-function watchBasari(){
+function dateStr(d){ return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+
+async function openBasariPanel(){
+  document.getElementById("basariOverlay").classList.add("show");
+  var body = document.getElementById("basariBody");
+  body.innerHTML = '<div class="empty">Hesaplaniyor...</div>';
   try {
-    basariDocRef = doc(db, BASARI_DOC.col, BASARI_DOC.id);
-    onSnapshot(basariDocRef, function(snap){
-      basariData = snap.exists() ? snap.data() : null;
-      if (document.getElementById("basariOverlay").classList.contains("show")) renderBasari();
-    }, function(err){ console.error("[cariTakip] basari dinlenemedi:", err); });
-  } catch (e) { console.error("[cariTakip] basari baglanamadi:", e); }
+    var today = new Date();
+    var yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    var dayBefore = new Date(today); dayBefore.setDate(today.getDate() - 2);
+    var yStr = dateStr(yesterday), bStr = dateStr(dayBefore);
+
+    var ySnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, yStr));
+    var bSnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, bStr));
+
+    if (!ySnap.exists() || !bSnap.exists()){
+      body.innerHTML = '<div class="empty">Dun (' + escapeHtml(fmtDateISOtoTR(yStr)) + ') icin karsilastirma yapilamiyor.<br/>Hem dun hem bir onceki gun icin Excel yuklemesi olmasi gerekiyor.</div>';
+      return;
+    }
+    var yData = ySnap.data() || {};
+    var bData = bSnap.data() || {};
+    var topPlaka = null, topCollected = -Infinity;
+    Object.keys(yData).forEach(function(plaka){
+      var before = bData[plaka] || 0;
+      var after = yData[plaka];
+      var collected = before - after;
+      if (collected > topCollected){ topCollected = collected; topPlaka = plaka; }
+    });
+    if (!topPlaka || topCollected <= 0){
+      body.innerHTML = '<div class="empty">Dun (' + escapeHtml(fmtDateISOtoTR(yStr)) + ') hicbir plakada net tahsilat olmamis.</div>';
+      return;
+    }
+    var isim = soforAdi(topPlaka);
+    var html = '<div class="basari-box">';
+    html += '  <div class="trophy">🏆</div>';
+    html += '  <div class="plate">' + escapeHtml(topPlaka) + '</div>';
+    if (isim) html += '  <div class="sofor">' + escapeHtml(isim) + '</div>';
+    html += '  <div class="amount">' + fmtMoney(topCollected) + '</div>';
+    html += '  <div class="caption">Dun (' + escapeHtml(fmtDateISOtoTR(yStr)) + ') en cok tahsilat yapan plaka</div>';
+    html += '</div>';
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<div class="empty">Hata: ' + escapeHtml(e.message) + '</div>';
+  }
 }
 
 function populateSalesDropdown(){
@@ -256,22 +291,7 @@ function renderSoforList(){
   });
 }
 
-function renderBasari(){
-  var body = document.getElementById("basariBody");
-  if (!basariData || !basariData.topPlaka){
-    body.innerHTML = '<div class="empty">Henuz karsilastirma verisi yok. Yeni bir Excel yuklendiginde otomatik hesaplanacak.</div>';
-    return;
-  }
-  var isim = soforAdi(basariData.topPlaka);
-  var html = '<div class="basari-box">';
-  html += '  <div class="trophy">🏆</div>';
-  html += '  <div class="plate">' + escapeHtml(basariData.topPlaka) + '</div>';
-  if (isim) html += '  <div class="sofor">' + escapeHtml(isim) + '</div>';
-  html += '  <div class="amount">' + fmtMoney(basariData.topCollected) + '</div>';
-  html += '  <div class="caption">Son Excel yuklemesinde en cok tahsilat yapan plaka</div>';
-  html += '</div>';
-  body.innerHTML = html;
-}
+// (renderBasari kaldirildi; artik openBasariPanel kullaniliyor - gunluk kayitlara dayali gercek "dun" karsilastirmasi)
 
 // ---------- Yonetici filtreleri ----------
 
@@ -340,11 +360,15 @@ function pendingPaymentsIn(list){
   return list.filter(function(c){ return c.paymentReported && !c.paymentReviewed; });
 }
 
+var activeQuickFilter = null; // null | "flagged" | "noted"
+
 function render(){
   var list = document.getElementById("list");
   var q = document.getElementById("searchBox").value.toLocaleLowerCase("tr").trim();
   var visible = getVisibleCariler();
   var filtered = visible.filter(function(c){ return !q || c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
+  if (activeQuickFilter === "flagged") filtered = filtered.filter(function(c){ return c.flagged; });
+  if (activeQuickFilter === "noted") filtered = filtered.filter(function(c){ return !!c.note; });
 
   if (visible.length === 0){
     list.innerHTML = currentRole === "sales"
@@ -390,9 +414,13 @@ function render(){
     });
   }
 
-  document.getElementById("sumCount").textContent = visible.length;
+  document.getElementById("cariCountLabel").textContent = "(" + visible.length + ")";
+  document.getElementById("sumNoted").textContent = visible.filter(function(c){ return !!c.note; }).length;
   document.getElementById("sumDebt").textContent = fmtMoney(visible.reduce(function(s, c){ return s + (c.debt || 0); }, 0));
   document.getElementById("sumFlag").textContent = visible.filter(function(c){ return c.flagged; }).length;
+
+  document.getElementById("chipNoted").classList.toggle("active", activeQuickFilter === "noted");
+  document.getElementById("chipFlag").classList.toggle("active", activeQuickFilter === "flagged");
 
   var pendingCount = pendingPaymentsIn(visible).length;
   var badge = document.getElementById("paymentBadge");
@@ -600,7 +628,6 @@ function renderPaymentList(){
     if (currentRole === "admin"){
       html += '<button type="button" class="approve" data-act="approve">Onayla</button>';
       html += '<button type="button" class="reject" data-act="reject">Reddet</button>';
-      html += '<button type="button" class="clearnote" data-act="clearnote">Notu Temizle</button>';
     } else {
       html += '<button type="button" class="cancel" data-act="cancel">Bildirimi Iptal Et</button>';
     }
@@ -621,11 +648,14 @@ async function handlePaymentAction(id, action){
   try {
     if (action === "approve"){
       status.textContent = "Isleniyor...";
+      // Odeme onaylaninca not/tarih/sorunlu bilgisi de temizlenir -- eski borc notu
+      // yeni bir odeme bekleniyormus gibi yanlis izlenim vermesin diye.
       await setDoc(doc(db, CARI_COLLECTION, id), {
-        paymentReviewed: true, rejectionReason: "",
+        note: "", due: "", flagged: false,
+        paymentReported: false, paymentAmount: 0, paymentReviewed: true, paymentReportedBy: "", rejectionReason: "",
         lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
       }, { merge: true });
-      status.textContent = "Onaylandi.";
+      status.textContent = "Onaylandi, not temizlendi.";
     } else if (action === "reject"){
       var reason = prompt("Reddetme sebebini yazin (orn: Odeme yetersiz, yarin POS cektir):", "");
       if (reason === null) return;
@@ -637,14 +667,6 @@ async function handlePaymentAction(id, action){
         lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
       }, { merge: true });
       status.textContent = "Reddedildi.";
-    } else if (action === "clearnote"){
-      status.textContent = "Isleniyor...";
-      await setDoc(doc(db, CARI_COLLECTION, id), {
-        note: "", due: "", flagged: false,
-        paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "", rejectionReason: "",
-        lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
-      }, { merge: true });
-      status.textContent = "Not temizlendi.";
     } else if (action === "cancel"){
       status.textContent = "Isleniyor...";
       await setDoc(doc(db, CARI_COLLECTION, id), {
@@ -833,9 +855,17 @@ async function handleExcelUpload(file){
       var collected = before - after;
       if (collected > topCollected){ topCollected = collected; topPlaka = yeniPlakalar[np]; }
     });
-    if (topPlaka && topCollected > 0 && basariDocRef){
-      try { await setDoc(basariDocRef, { topPlaka: topPlaka, topCollected: topCollected, hesaplananTarih: serverTimestamp() }, { merge: false }); }
-      catch (e) { console.error("[cariTakip] basari kaydi yazilamadi:", e); }
+
+    // gunun toplam bakiyelerini (plaka bazli) bugunun gunluk kaydina yaz -- "Dunun Basarisi"
+    // gercek takvim gunune gore hesaplanabilsin diye. Ayni gun birden fazla yukleme yapilirsa
+    // bu kayit sadece guncellenir, ayri gun olusturmaz.
+    if (Object.keys(afterTotals).length > 0){
+      try {
+        var todayStr = dateStr(new Date());
+        var gunlukData = {};
+        Object.keys(afterTotals).forEach(function(np){ gunlukData[yeniPlakalar[np]] = afterTotals[np]; });
+        await setDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, todayStr), gunlukData, { merge: true });
+      } catch (e) { console.error("[cariTakip] gunluk bakiye yazilamadi:", e); }
     }
 
     if (metaDocRef){
@@ -847,7 +877,7 @@ async function handleExcelUpload(file){
     summary += '<div class="line"><span>Islenen cari</span><b>' + count + '</b></div>';
     summary += '<div class="line"><span>Pasife alinan (Excelde artik yok)</span><b>' + toDeactivate.length + '</b></div>';
     if (eklenecekler.length > 0) summary += '<div class="line"><span>Yeni eklenen plaka</span><b>' + eklenecekler.length + '</b></div>';
-    if (topPlaka && topCollected > 0) summary += '<div class="line"><span>En cok tahsilat</span><b>' + escapeHtml(topPlaka) + ': ' + fmtMoney(topCollected) + '</b></div>';
+    if (topPlaka && topCollected > 0) summary += '<div class="line"><span>Bu yuklemede en cok azalan bakiye</span><b>' + escapeHtml(topPlaka) + ': ' + fmtMoney(topCollected) + '</b></div>';
     finishUploadModal(true, summary);
   } catch (err) {
     finishUploadModal(false, '<div class="line">Hata: ' + escapeHtml(err.message) + '</div>');
@@ -916,8 +946,7 @@ function wireHamburger(){
 
   on("menuBasari", "click", function(e){
     e.preventDefault(); menu.classList.add("hidden");
-    renderBasari();
-    document.getElementById("basariOverlay").classList.add("show");
+    openBasariPanel();
   });
 
   on("menuPlakaYonetimi", "click", function(e){
@@ -1007,6 +1036,8 @@ function wireEvents(){
   on("overlay", "click", function(e){ if (e.target === this) closeDetail(); });
   on("saveBtn", "click", saveCurrentNote);
   on("searchBox", "input", render);
+  on("chipFlag", "click", function(){ activeQuickFilter = activeQuickFilter === "flagged" ? null : "flagged"; render(); });
+  on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
   on("fileInput", "change", function(e){ var f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; });
   on("uploadCloseBtn", "click", function(){ document.getElementById("uploadOverlay").classList.remove("show"); });
   wireCalendar();
@@ -1127,7 +1158,6 @@ function wireLoginScreen(){
 watchPlakaConfig();
 watchMeta();
 watchSofor();
-watchBasari();
 
 var alreadyUnlocked = false, savedRole = "", savedUserName = "", savedPlaka = "";
 try {
