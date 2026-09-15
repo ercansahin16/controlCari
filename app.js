@@ -314,10 +314,11 @@ function hideNightLock(){ var el = document.getElementById("nightLock"); if (el)
 // ---------- Rol bazli gorunur liste ----------
 
 function getVisibleCariler(){
-  var base = cariler;
+  var active = cariler.filter(function(c){ return c.aktif; });
+  var base = active;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
-    base = cariler.filter(function(c){
+    base = active.filter(function(c){
       if (wantYok) return !c.plaka;
       if (!c.plaka) return false;
       return currentPlakalar.indexOf(normalizePlate(c.plaka)) !== -1;
@@ -325,7 +326,7 @@ function getVisibleCariler(){
   } else if (currentRole === "admin"){
     var k1 = document.getElementById("filterKategori1") ? document.getElementById("filterKategori1").value : "";
     var pk = document.getElementById("filterPlaka") ? document.getElementById("filterPlaka").value : "";
-    base = cariler.filter(function(c){
+    base = active.filter(function(c){
       if (k1 && c.kategori1 !== k1) return false;
       if (pk === PLAKA_YOK && c.plaka) return false;
       if (pk && pk !== PLAKA_YOK && normalizePlate(c.plaka) !== normalizePlate(pk)) return false;
@@ -708,9 +709,35 @@ function requiredColumnsText(){
   return "Gerekli kolonlar: " + REQUIRED_COLUMNS.map(function(c){ return c.label; }).join(", ");
 }
 
+// ---------- Yukleme modali ----------
+
+function showUploadModal(){
+  document.getElementById("uploadIcon").textContent = "⏳";
+  document.getElementById("uploadTitle").textContent = "Excel Yukleniyor";
+  document.getElementById("uploadProgressBar").style.width = "0%";
+  document.getElementById("uploadProgressText").textContent = "Basliyor...";
+  document.getElementById("uploadSummary").innerHTML = "";
+  document.getElementById("uploadCloseBtn").classList.add("hidden");
+  document.getElementById("uploadOverlay").classList.add("show");
+  document.getElementById("uploadLabel").classList.add("disabled");
+}
+function updateUploadProgress(count, total){
+  var pct = total ? Math.round((count / total) * 100) : 0;
+  document.getElementById("uploadProgressBar").style.width = pct + "%";
+  document.getElementById("uploadProgressText").textContent = count + " / " + total + " cari islendi (" + pct + "%)";
+}
+function finishUploadModal(success, summaryHtml){
+  document.getElementById("uploadIcon").textContent = success ? "✅" : "⚠️";
+  document.getElementById("uploadTitle").textContent = success ? "Yukleme Tamamlandi" : "Yukleme Basarisiz";
+  document.getElementById("uploadProgressText").textContent = "";
+  if (success) document.getElementById("uploadProgressBar").style.width = "100%";
+  document.getElementById("uploadSummary").innerHTML = summaryHtml;
+  document.getElementById("uploadCloseBtn").classList.remove("hidden");
+  document.getElementById("uploadLabel").classList.remove("disabled");
+}
+
 async function handleExcelUpload(file){
-  var label = document.getElementById("uploadLabel");
-  label.textContent = "Okunuyor...";
+  showUploadModal();
   try {
     var buf = await file.arrayBuffer();
     var data = new Uint8Array(buf);
@@ -719,8 +746,7 @@ async function handleExcelUpload(file){
     var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
     if (rows.length < 2){
-      alert("Excel'de veri bulunamadi.");
-      label.textContent = "Excel Yukle (.xlsx)";
+      finishUploadModal(false, '<div class="line">Excel\'de veri bulunamadi.</div>');
       return;
     }
     var headers = rows[0];
@@ -733,8 +759,10 @@ async function handleExcelUpload(file){
       if (idx === -1) missing.push(rc.label);
     });
     if (missing.length > 0){
-      alert('Excel dosyasinda su kolon(lar) eksik: ' + missing.join(", ") + '.\n\n' + requiredColumnsText());
-      label.textContent = "Excel Yukle (.xlsx)";
+      finishUploadModal(false,
+        '<div class="line">Eksik kolon(lar): <b>' + escapeHtml(missing.join(", ")) + '</b></div>' +
+        '<div class="line" style="margin-top:8px;">' + escapeHtml(requiredColumnsText()) + '</div>'
+      );
       return;
     }
 
@@ -744,18 +772,20 @@ async function handleExcelUpload(file){
     var debtCol = colIndex["Borç Bak."];
     var kodCol = findCol(headers, ["kod"]); // zorunlu degil, varsa daha saglam id icin kullanilir
 
-    // "onceki" plaka bazli toplam bakiyeler (bu yuklemeden hemen once, mevcut canli veriden)
+    // bu yuklemeden hemen onceki durumun anlik goruntusu (once/sonra kiyaslari icin)
+    var cariSnapshotAtStart = cariler.slice();
     var beforeTotals = {};
-    cariler.forEach(function(c){
+    cariSnapshotAtStart.forEach(function(c){
       if (!c.plaka) return;
       var np = normalizePlate(c.plaka);
       beforeTotals[np] = (beforeTotals[np] || 0) + (c.debt || 0);
     });
 
-    label.textContent = "Yukleniyor 0/" + (rows.length - 1);
+    document.getElementById("uploadProgressText").textContent = "Basliyor...";
     var count = 0, total = rows.length - 1;
     var yeniPlakalar = {};
     var afterTotals = {};
+    var newIds = {};
 
     for (var i = 1; i < rows.length; i++){
       var r = rows[i];
@@ -767,9 +797,11 @@ async function handleExcelUpload(file){
       var plaka = (r[plakaCol] || "").toString().trim();
       var debt = parseNumber(r[debtCol]);
       var id = kod ? docIdFor(kod) : docIdFor(nm);
+      newIds[id] = true;
 
       await setDoc(doc(db, CARI_COLLECTION, id), {
-        name: nm, kod: kod, kategori1: kategori1, plaka: plaka, debt: debt, updatedAt: serverTimestamp()
+        name: nm, kod: kod, kategori1: kategori1, plaka: plaka, debt: debt,
+        aktif: true, updatedAt: serverTimestamp()
       }, { merge: true });
 
       if (plaka){
@@ -778,7 +810,13 @@ async function handleExcelUpload(file){
         afterTotals[npNew] = (afterTotals[npNew] || 0) + debt;
       }
       count++;
-      label.textContent = "Yukleniyor " + count + "/" + total;
+      updateUploadProgress(count, total);
+    }
+
+    // Excel'de artik gecmeyen (once aktif olan) carileri pasife al -- veri kaybetmeden
+    var toDeactivate = cariSnapshotAtStart.filter(function(c){ return c.aktif !== false && !newIds[c.id]; });
+    for (var j = 0; j < toDeactivate.length; j++){
+      await setDoc(doc(db, CARI_COLLECTION, toDeactivate[j].id), { aktif: false, updatedAt: serverTimestamp() }, { merge: true });
     }
 
     var mevcutNorm = plakaListesi.map(function(p){ return normalizePlate(p); });
@@ -788,7 +826,6 @@ async function handleExcelUpload(file){
       catch (e) { console.error("[cariTakip] plaka listesi guncellenemedi:", e); }
     }
 
-    // gunun basarisi: bu excelde gecen plakalar icin (once - sonra) farki
     var topPlaka = null, topCollected = -Infinity;
     Object.keys(afterTotals).forEach(function(np){
       var before = beforeTotals[np] || 0;
@@ -797,11 +834,8 @@ async function handleExcelUpload(file){
       if (collected > topCollected){ topCollected = collected; topPlaka = yeniPlakalar[np]; }
     });
     if (topPlaka && topCollected > 0 && basariDocRef){
-      try {
-        await setDoc(basariDocRef, {
-          topPlaka: topPlaka, topCollected: topCollected, hesaplananTarih: serverTimestamp()
-        }, { merge: false });
-      } catch (e) { console.error("[cariTakip] basari kaydi yazilamadi:", e); }
+      try { await setDoc(basariDocRef, { topPlaka: topPlaka, topCollected: topCollected, hesaplananTarih: serverTimestamp() }, { merge: false }); }
+      catch (e) { console.error("[cariTakip] basari kaydi yazilamadi:", e); }
     }
 
     if (metaDocRef){
@@ -809,11 +843,14 @@ async function handleExcelUpload(file){
       catch (e) { console.error("[cariTakip] meta guncellenemedi:", e); }
     }
 
-    label.textContent = "Excel Yukle (.xlsx)";
-    alert("Yukleme tamamlandi: " + count + " cari islendi.");
+    var summary = "";
+    summary += '<div class="line"><span>Islenen cari</span><b>' + count + '</b></div>';
+    summary += '<div class="line"><span>Pasife alinan (Excelde artik yok)</span><b>' + toDeactivate.length + '</b></div>';
+    if (eklenecekler.length > 0) summary += '<div class="line"><span>Yeni eklenen plaka</span><b>' + eklenecekler.length + '</b></div>';
+    if (topPlaka && topCollected > 0) summary += '<div class="line"><span>En cok tahsilat</span><b>' + escapeHtml(topPlaka) + ': ' + fmtMoney(topCollected) + '</b></div>';
+    finishUploadModal(true, summary);
   } catch (err) {
-    alert("Dosya okunurken hata olustu: " + err.message);
-    label.textContent = "Excel Yukle (.xlsx)";
+    finishUploadModal(false, '<div class="line">Hata: ' + escapeHtml(err.message) + '</div>');
   }
 }
 
@@ -831,6 +868,7 @@ function initRealtime(){
           id: docSnap.id, name: d.name || docSnap.id,
           kategori1: d.kategori1 || "", plaka: d.plaka || "",
           debt: d.debt || 0, note: d.note || "", due: d.due || "", flagged: !!d.flagged,
+          aktif: d.aktif !== false,
           paymentReported: !!d.paymentReported, paymentAmount: d.paymentAmount || 0,
           paymentReviewed: !!d.paymentReviewed, paymentReportedBy: d.paymentReportedBy || "",
           rejectionReason: d.rejectionReason || "",
@@ -970,6 +1008,7 @@ function wireEvents(){
   on("saveBtn", "click", saveCurrentNote);
   on("searchBox", "input", render);
   on("fileInput", "change", function(e){ var f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; });
+  on("uploadCloseBtn", "click", function(){ document.getElementById("uploadOverlay").classList.remove("show"); });
   wireCalendar();
   wireHamburger();
   wirePaidSwitch();
