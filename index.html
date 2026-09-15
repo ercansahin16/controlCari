@@ -67,6 +67,7 @@
   .row .tag{ display:inline-block; font-size:9px; color:var(--muted); background:var(--card2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; margin-right:4px; }
   .row .note-preview{ font-size:10.5px; color:var(--danger); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .due{ font-size:10px; color:var(--warn); margin-top:2px; }
+  .row .lastcollect{ font-size:10px; color:var(--accent); margin-top:2px; }
   .row .editor{ font-size:9.5px; color:var(--accent); margin-top:2px; }
   .row .paidline{ font-size:10.5px; color:var(--ok); margin-top:2px; font-weight:600; }
   .row .right{ text-align:right; flex-shrink:0; }
@@ -119,6 +120,7 @@
   .btn-row{ display:flex; gap:8px; }
   .btn{ flex:1; border:none; border-radius:8px; padding:10px; font-size:12px; font-weight:600; }
   .btn.save{ background:var(--accent); color:#fff; }
+  .btn.clear{ background:var(--warn); color:#2a1c00; }
   .btn.close{ background:var(--card2); color:var(--text); border:1px solid var(--border); }
   .btn.delete{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); flex:0 0 auto; padding:10px 12px; }
   .status{ font-size:10.5px; color:var(--muted); text-align:center; padding:4px 0 0 0; }
@@ -324,6 +326,7 @@
     <div class="sheet-footer">
       <div class="btn-row">
         <button class="btn close" id="closeBtn">Kapat</button>
+        <button class="btn clear hidden" id="clearDetailBtn">Temizle</button>
         <button class="btn save" id="saveBtn">Kaydet</button>
       </div>
       <div class="status" id="saveStatus"></div>
