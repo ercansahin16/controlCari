@@ -390,8 +390,8 @@ function render(){
       html += '    <div class="tags">';
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
       html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
+      if (c.sonTahTarihi) html += '<span class="tag">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + '</span>';
       html += '    </div>';
-      if (c.sonTahTarihi) html += '    <div class="lastcollect">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + '</div>';
       if (c.note) html += '    <div class="note-preview">' + escapeHtml(c.note) + '</div>';
       if (c.due) html += '    <div class="due">Odeme bekleniyor: ' + escapeHtml(fmtDateISOtoTR(c.due)) + '</div>';
       if (c.paymentReported){
