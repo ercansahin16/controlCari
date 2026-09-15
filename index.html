@@ -120,6 +120,16 @@
   .btn.delete{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); flex:0 0 auto; padding:10px 12px; }
   .status{ font-size:10.5px; color:var(--muted); text-align:center; padding:4px 0 0 0; }
 
+  /* Excel yukleme modali */
+  .upload-icon{ font-size:38px; text-align:center; margin-bottom:4px; }
+  .upload-progress-wrap{ background:var(--card2); border-radius:8px; height:10px; overflow:hidden; margin:10px 0 6px 0; }
+  .upload-progress-bar{ height:100%; width:0%; background:var(--accent); transition:width .2s; }
+  .upload-progress-text{ font-size:11.5px; color:var(--muted); text-align:center; }
+  .upload-summary{ font-size:12px; margin-top:12px; line-height:1.7; }
+  .upload-summary .line{ display:flex; justify-content:space-between; padding:5px 8px; background:var(--card2); border-radius:6px; margin-bottom:5px; }
+  .upload-summary .line b{ color:var(--text); }
+  .upload-btn.disabled{ opacity:.5; pointer-events:none; }
+
   #lockScreen{ position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:50; padding:24px; }
   #lockScreen.hidden{ display:none; }
   .lock-box{ width:100%; max-width:280px; text-align:center; }
@@ -360,6 +370,23 @@
   </div>
 </div>
 
+<div class="overlay" id="uploadOverlay">
+  <div class="sheet">
+    <div class="sheet-head" style="text-align:center;">
+      <div class="upload-icon" id="uploadIcon">⏳</div>
+      <h2 id="uploadTitle">Excel Yukleniyor</h2>
+    </div>
+    <div class="sheet-body">
+      <div class="upload-progress-wrap"><div class="upload-progress-bar" id="uploadProgressBar"></div></div>
+      <div class="upload-progress-text" id="uploadProgressText">Basliyor...</div>
+      <div class="upload-summary" id="uploadSummary"></div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn save hidden" id="uploadCloseBtn" style="width:100%;">Tamam</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="soforOverlay">
   <div class="sheet">
     <div class="sheet-head"><h2>Sofor Tanimlama</h2><div class="sub">Her plakaya bir sofor/plasiyer ismi verebilirsiniz.</div></div>
@@ -383,7 +410,7 @@
   </div>
 </div>
 
-</div><!-- #appRoot RR -->
+</div><!-- #appRoot -->
 
 <script type="module" src="app.js"></script>
 </body>
