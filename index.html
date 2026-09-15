@@ -51,8 +51,11 @@
   .search{ margin-top:8px; width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:7px 9px; color:var(--text); font-size:12px; }
   .summary{ display:flex; gap:6px; margin-top:8px; }
   .chip{ flex:1; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:6px 8px; text-align:center; }
+  .chip.clickable{ cursor:pointer; }
+  .chip.active{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
   .chip .n{ font-size:13px; font-weight:700; display:block; }
   .chip .l{ font-size:10px; color:var(--muted); }
+  #cariCountLabel{ font-size:10px; color:var(--muted); font-weight:400; }
   .list{ padding:8px 10px; }
   .empty{ color:var(--muted); text-align:center; padding:40px 20px; font-size:12px; line-height:1.6; }
   .row{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:9px 10px; margin-bottom:7px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
@@ -160,7 +163,6 @@
   .review-item .ractions{ display:flex; gap:6px; margin-top:8px; }
   .review-item .ractions button{ flex:1; border:none; border-radius:6px; padding:7px; font-size:10.5px; font-weight:600; cursor:pointer; }
   .review-item .ractions .approve{ background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok); }
-  .review-item .ractions .clearnote{ background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); }
   .review-item .ractions .reject{ background:var(--warn); color:#2a1c00; border:1px solid var(--warn); }
   .review-item .ractions .cancel{ background:var(--card); color:var(--text); border:1px solid var(--border); }
   .row .rejectline{ font-size:10.5px; color:var(--warn); margin-top:2px; }
@@ -230,7 +232,7 @@
 <div id="appRoot" class="locked">
 <div class="topbar">
   <div class="topbar-head">
-    <h1>Cari Takip</h1>
+    <h1>Cari Takip <span id="cariCountLabel">(0)</span></h1>
     <button class="icon-btn" id="paymentIconBtn">💰<span class="badge hidden" id="paymentBadge">0</span></button>
     <button class="icon-btn" id="hamburgerBtn">☰</button>
     <div id="hamburgerMenu" class="hidden">
@@ -255,9 +257,9 @@
     <select id="filterPlaka"><option value="">Tum Plakalar</option></select>
   </div>
   <div class="summary">
-    <div class="chip"><span class="n" id="sumCount">0</span><span class="l">Cari</span></div>
+    <div class="chip clickable" id="chipNoted"><span class="n" id="sumNoted">0</span><span class="l">Not Olan</span></div>
     <div class="chip"><span class="n" id="sumDebt">0</span><span class="l">Toplam Bakiye</span></div>
-    <div class="chip"><span class="n" id="sumFlag">0</span><span class="l">Sorunlu</span></div>
+    <div class="chip clickable" id="chipFlag"><span class="n" id="sumFlag">0</span><span class="l">Sorunlu</span></div>
   </div>
 </div>
 
