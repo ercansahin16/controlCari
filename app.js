@@ -601,6 +601,10 @@ function initRealtime(){
 function wireHamburger(){
   var btn = document.getElementById("hamburgerBtn");
   var menu = document.getElementById("hamburgerMenu");
+  if (!btn || !menu){
+    console.error("[cariTakip] HATA: hamburger menu elemanlari bulunamadi (hamburgerBtn/hamburgerMenu). index.html eski surum olabilir.");
+    return;
+  }
 
   btn.addEventListener("click", function(e){
     e.stopPropagation();
@@ -612,12 +616,21 @@ function wireHamburger(){
     }
   });
 
-  document.getElementById("menuLogout").addEventListener("click", function(e){
+  function on(id, ev, fn){
+    var el = document.getElementById(id);
+    if (!el){
+      console.error("[cariTakip] HATA: '" + id + "' id'li eleman bulunamadi.");
+      return;
+    }
+    el.addEventListener(ev, fn);
+  }
+
+  on("menuLogout", "click", function(e){
     e.preventDefault();
     logout();
   });
 
-  document.getElementById("menuPlakaYonetimi").addEventListener("click", function(e){
+  on("menuPlakaYonetimi", "click", function(e){
     e.preventDefault();
     menu.classList.add("hidden");
     if (currentRole !== "admin"){
@@ -625,24 +638,28 @@ function wireHamburger(){
       return;
     }
     renderPlakaManagementList();
-    document.getElementById("plakaStatus").textContent = "";
-    document.getElementById("plakaOverlay").classList.add("show");
+    var st = document.getElementById("plakaStatus");
+    if (st) st.textContent = "";
+    var ov = document.getElementById("plakaOverlay");
+    if (ov) ov.classList.add("show");
   });
 
-  document.getElementById("closePlakaBtn").addEventListener("click", function(){
-    document.getElementById("plakaOverlay").classList.remove("show");
+  on("closePlakaBtn", "click", function(){
+    var ov = document.getElementById("plakaOverlay");
+    if (ov) ov.classList.remove("show");
   });
-  document.getElementById("plakaOverlay").addEventListener("click", function(e){
+  on("plakaOverlay", "click", function(e){
     if (e.target === this) this.classList.remove("show");
   });
-  document.getElementById("addPlakaBtn").addEventListener("click", addPlaka);
-  document.getElementById("newPlakaInput").addEventListener("keydown", function(e){
+  on("addPlakaBtn", "click", addPlaka);
+  on("newPlakaInput", "keydown", function(e){
     if (e.key === "Enter") addPlaka();
   });
 
   // plasiyer rolunde plaka yonetimi menu ogesini gizle
   if (currentRole !== "admin"){
-    document.getElementById("menuPlakaYonetimi").classList.add("hidden");
+    var mp = document.getElementById("menuPlakaYonetimi");
+    if (mp) mp.classList.add("hidden");
   }
 }
 
@@ -769,17 +786,26 @@ function tryAdminLogin(){
 }
 
 function wireLoginScreen(){
-  document.getElementById("roleSalesBtn").addEventListener("click", showSalesForm);
-  document.getElementById("roleAdminBtn").addEventListener("click", showAdminForm);
-  document.getElementById("salesBack").addEventListener("click", function(e){ e.preventDefault(); showRoleChoice(); });
-  document.getElementById("adminBack").addEventListener("click", function(e){ e.preventDefault(); showRoleChoice(); });
+  function on(id, ev, fn){
+    var el = document.getElementById(id);
+    if (!el){
+      console.error("[cariTakip] HATA: '" + id + "' id'li eleman index.html icinde bulunamadi. app.js ile index.html farkli surumler olabilir, ikisini de guncelleyip tekrar deneyin.");
+      return;
+    }
+    el.addEventListener(ev, fn);
+  }
 
-  document.getElementById("salesPlakaSelect").addEventListener("change", function(){
+  on("roleSalesBtn", "click", showSalesForm);
+  on("roleAdminBtn", "click", showAdminForm);
+  on("salesBack", "click", function(e){ e.preventDefault(); showRoleChoice(); });
+  on("adminBack", "click", function(e){ e.preventDefault(); showRoleChoice(); });
+
+  on("salesPlakaSelect", "change", function(){
     trySalesLogin(this.value);
   });
 
-  document.getElementById("adminSubmit").addEventListener("click", tryAdminLogin);
-  document.getElementById("adminPinInput").addEventListener("keydown", function(e){
+  on("adminSubmit", "click", tryAdminLogin);
+  on("adminPinInput", "keydown", function(e){
     if (e.key === "Enter") tryAdminLogin();
   });
 }
