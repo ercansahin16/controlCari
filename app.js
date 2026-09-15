@@ -30,7 +30,8 @@ const REQUIRED_COLUMNS = [
   { label: "Ünvan", match: ["ünvan", "unvan"] },
   { label: "Cari Kategori 1", match: ["cari kategori 1"] },
   { label: "Cari Kategori 5", match: ["cari kategori 5"] },
-  { label: "Borç Bak.", match: ["borç bak", "borc bak"] }
+  { label: "Borç Bak.", match: ["borç bak", "borc bak"] },
+  { label: "Son Tah. Tarihi", match: ["son tah"] }
 ];
 
 var plakaDocRef = null;
@@ -390,6 +391,7 @@ function render(){
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
       html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
       html += '    </div>';
+      if (c.sonTahTarihi) html += '    <div class="lastcollect">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + '</div>';
       if (c.note) html += '    <div class="note-preview">' + escapeHtml(c.note) + '</div>';
       if (c.due) html += '    <div class="due">Odeme bekleniyor: ' + escapeHtml(fmtDateISOtoTR(c.due)) + '</div>';
       if (c.paymentReported){
@@ -518,6 +520,7 @@ function openDetail(id){
   var metaParts = [];
   if (c.kategori1) metaParts.push("Bolge: " + c.kategori1);
   metaParts.push("Plaka: " + (c.plaka || "Yok"));
+  if (c.sonTahTarihi) metaParts.push("Son Tahsilat: " + c.sonTahTarihi);
   document.getElementById("detailMeta").textContent = metaParts.join(" | ");
 
   document.getElementById("debtInput").value = c.debt || 0;
@@ -562,6 +565,24 @@ async function writeHistory(c, data){
       editedBy: data.lastEditedBy, editedAt: serverTimestamp()
     });
   } catch (e) { console.error("[cariTakip] gecmis kaydi yazilamadi:", e); }
+}
+
+async function clearCurrentDetail(){
+  if (!currentDocId) return;
+  if (!confirm("Bu carinin notu, tarihi, sorunlu isareti ve odeme bildirimi tamamen temizlensin mi? Isim/kategori/plaka/bakiye bilgisi degismez.")) return;
+  var status = document.getElementById("saveStatus");
+  status.textContent = "Temizleniyor...";
+  try {
+    await setDoc(doc(db, CARI_COLLECTION, currentDocId), {
+      note: "", due: "", flagged: false,
+      paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "", rejectionReason: "",
+      lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
+    }, { merge: true });
+    status.textContent = "Temizlendi.";
+    setTimeout(closeDetail, 400);
+  } catch (e) {
+    status.textContent = "Temizlenemedi: " + e.message;
+  }
 }
 
 async function saveCurrentNote(){
@@ -765,7 +786,7 @@ async function handleExcelUpload(file){
     var data = new Uint8Array(buf);
     var wb = XLSX.read(data, { type: "array" });
     var sheet = wb.Sheets[wb.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
 
     if (rows.length < 2){
       finishUploadModal(false, '<div class="line">Excel\'de veri bulunamadi.</div>');
@@ -792,6 +813,7 @@ async function handleExcelUpload(file){
     var kategori1Col = colIndex["Cari Kategori 1"];
     var plakaCol = colIndex["Cari Kategori 5"];
     var debtCol = colIndex["Borç Bak."];
+    var sonTahCol = colIndex["Son Tah. Tarihi"];
     var kodCol = findCol(headers, ["kod"]); // zorunlu degil, varsa daha saglam id icin kullanilir
 
     // bu yuklemeden hemen onceki durumun anlik goruntusu (once/sonra kiyaslari icin)
@@ -818,11 +840,13 @@ async function handleExcelUpload(file){
       var kategori1 = (r[kategori1Col] || "").toString().trim();
       var plaka = (r[plakaCol] || "").toString().trim();
       var debt = parseNumber(r[debtCol]);
+      var sonTahTarihi = (r[sonTahCol] || "").toString().trim();
       var id = kod ? docIdFor(kod) : docIdFor(nm);
       newIds[id] = true;
 
       await setDoc(doc(db, CARI_COLLECTION, id), {
         name: nm, kod: kod, kategori1: kategori1, plaka: plaka, debt: debt,
+        sonTahTarihi: sonTahTarihi,
         aktif: true, updatedAt: serverTimestamp()
       }, { merge: true });
 
@@ -898,6 +922,7 @@ function initRealtime(){
           id: docSnap.id, name: d.name || docSnap.id,
           kategori1: d.kategori1 || "", plaka: d.plaka || "",
           debt: d.debt || 0, note: d.note || "", due: d.due || "", flagged: !!d.flagged,
+          sonTahTarihi: d.sonTahTarihi || "",
           aktif: d.aktif !== false,
           paymentReported: !!d.paymentReported, paymentAmount: d.paymentAmount || 0,
           paymentReviewed: !!d.paymentReviewed, paymentReportedBy: d.paymentReportedBy || "",
@@ -1035,6 +1060,7 @@ function wireEvents(){
   on("closeBtn", "click", closeDetail);
   on("overlay", "click", function(e){ if (e.target === this) closeDetail(); });
   on("saveBtn", "click", saveCurrentNote);
+  on("clearDetailBtn", "click", clearCurrentDetail);
   on("searchBox", "input", render);
   on("chipFlag", "click", function(){ activeQuickFilter = activeQuickFilter === "flagged" ? null : "flagged"; render(); });
   on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
@@ -1059,15 +1085,18 @@ function applyRoleUI(){
   var userInfo = document.getElementById("userInfo");
   var reqCols = document.getElementById("requiredCols");
   var filterRow = document.getElementById("adminFilterRow");
+  var clearBtn = document.getElementById("clearDetailBtn");
 
   if (currentRole === "admin"){
     uploadRow.classList.remove("hidden");
     filterRow.classList.remove("hidden");
+    clearBtn.classList.remove("hidden");
     reqCols.textContent = requiredColumnsText();
     userInfo.innerHTML = 'Yonetici: <b>' + escapeHtml(currentUserName) + '</b>';
   } else {
     uploadRow.classList.add("hidden");
     filterRow.classList.add("hidden");
+    clearBtn.classList.add("hidden");
     reqCols.textContent = "";
     var plakaLabel = currentPlakalar[0] === PLAKA_YOK ? "Plaka Yok" : (currentPlakalar[0] || "");
     var isim = currentPlakalar[0] === PLAKA_YOK ? "" : soforAdi(plakaLabel);
