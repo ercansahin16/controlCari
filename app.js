@@ -1,9 +1,9 @@
-// app.js — Cari Takip (kompakt surum): rol bazli giris, odeme bildirimi,
-// gece kilidi, gecmis kaydi, kolon dogrulama.
+// app.js — Cari Takip: rol bazli giris, odeme onay/red akisi, gunluk basari,
+// sofor tanimlama, yonetici filtreleri, gece kilidi, gecmis kaydi.
 
 import { db } from "./firebase-core.js";
 import {
-  collection, doc, setDoc, deleteDoc, onSnapshot,
+  collection, doc, setDoc, onSnapshot,
   serverTimestamp, arrayUnion, arrayRemove,
   query, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
@@ -11,42 +11,48 @@ import {
 // ---- Yonetici PIN'i ----
 const ADMIN_PIN = "1234";
 
-const UNLOCK_KEY = "cariTakip_unlocked_v4";
-const ROLE_KEY = "cariTakip_role_v4";
-const USERNAME_KEY = "cariTakip_userName_v4";
-const PLAKA_KEY = "cariTakip_plaka_v4";
+const UNLOCK_KEY = "cariTakip_unlocked_v5";
+const ROLE_KEY = "cariTakip_role_v5";
+const USERNAME_KEY = "cariTakip_userName_v5";
+const PLAKA_KEY = "cariTakip_plaka_v5";
 
 const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
+const SOFOR_DOC = { col: "config", id: "soforler" };
+const BASARI_DOC = { col: "config", id: "gunluk_basari" };
 const PLAKA_YOK = "PLAKA_YOK";
 
-// Excel'de olmasi zorunlu kolonlar (kullanicinin verdigi rapor formati)
+// Excelde bulunmasi zorunlu (sadece bunlar) kolonlar
 const REQUIRED_COLUMNS = [
-  { label: "Kod", match: ["kod"] },
   { label: "Ünvan", match: ["ünvan", "unvan"] },
   { label: "Cari Kategori 1", match: ["cari kategori 1"] },
   { label: "Cari Kategori 5", match: ["cari kategori 5"] },
-  { label: "Cari Kategori 2", match: ["cari kategori 2"] },
-  { label: "Son Tah. Tarihi", match: ["son tah"] },
-  { label: "Borç Bak.", match: ["borç bak", "borc bak"] },
-  { label: "Alç. Bak.", match: ["alç. bak", "alc. bak", "alç bak", "alc bak"] },
-  { label: "Son İşl. Tarih", match: ["son işl", "son isl"] },
-  { label: "#", match: ["#"] }
+  { label: "Borç Bak.", match: ["borç bak", "borc bak"] }
 ];
 
 var plakaDocRef = null;
 var metaDocRef = null;
+var soforDocRef = null;
+var basariDocRef = null;
 
 var cariler = [];
 var plakaListesi = [];
-var lastUploadAt = null; // Date | null
+var soforMap = {}; // plaka -> isim
+var lastUploadAt = null;
+var basariData = null;
+
 var currentDocId = null;
 var currentUserName = "";
 var currentRole = "";
 var currentPlakalar = [];
 var nightLockActive = false;
+var appWired = false;
+
+var unsubCariler = null;
+var unsubHistory = null;
+var nightLockInterval = null;
 
 var calViewYear, calViewMonth;
 var calSelectedISO = "";
@@ -109,8 +115,9 @@ function on(id, ev, fn){
   if (!el){ console.error("[cariTakip] HATA: '" + id + "' bulunamadi (index.html/app.js uyumsuz olabilir)."); return; }
   el.addEventListener(ev, fn);
 }
+function soforAdi(plaka){ return soforMap[normalizePlate(plaka)] || ""; }
 
-// ---------- Plaka konfigurasyonu + meta (herkes icin, sayfa acilir acilmaz) ----------
+// ---------- Plaka / meta / sofor konfigurasyonu ----------
 
 function watchPlakaConfig(){
   try {
@@ -121,6 +128,8 @@ function watchPlakaConfig(){
       plakaListesi.sort(function(a, b){ return a.localeCompare(b, "tr"); });
       populateSalesDropdown();
       renderPlakaManagementList();
+      renderSoforList();
+      populateAdminFilters();
     }, function(err){ console.error("[cariTakip] plaka config dinlenemedi:", err); });
   } catch (e) { console.error("[cariTakip] plaka config baglanamadi:", e); }
 }
@@ -136,6 +145,27 @@ function watchMeta(){
   } catch (e) { console.error("[cariTakip] meta baglanamadi:", e); }
 }
 
+function watchSofor(){
+  try {
+    soforDocRef = doc(db, SOFOR_DOC.col, SOFOR_DOC.id);
+    onSnapshot(soforDocRef, function(snap){
+      soforMap = snap.exists() ? (snap.data() || {}) : {};
+      renderSoforList();
+      render();
+    }, function(err){ console.error("[cariTakip] sofor dinlenemedi:", err); });
+  } catch (e) { console.error("[cariTakip] sofor baglanamadi:", e); }
+}
+
+function watchBasari(){
+  try {
+    basariDocRef = doc(db, BASARI_DOC.col, BASARI_DOC.id);
+    onSnapshot(basariDocRef, function(snap){
+      basariData = snap.exists() ? snap.data() : null;
+      if (document.getElementById("basariOverlay").classList.contains("show")) renderBasari();
+    }, function(err){ console.error("[cariTakip] basari dinlenemedi:", err); });
+  } catch (e) { console.error("[cariTakip] basari baglanamadi:", e); }
+}
+
 function populateSalesDropdown(){
   var sel = document.getElementById("salesPlakaSelect");
   if (!sel) return;
@@ -143,12 +173,11 @@ function populateSalesDropdown(){
   sel.innerHTML = '<option value="">Plaka secin...</option>';
   plakaListesi.forEach(function(p){
     var opt = document.createElement("option");
-    opt.value = p; opt.textContent = p;
+    opt.value = p; opt.textContent = p + (soforAdi(p) ? " - " + soforAdi(p) : "");
     sel.appendChild(opt);
   });
   var yokOpt = document.createElement("option");
-  yokOpt.value = PLAKA_YOK;
-  yokOpt.textContent = "Plaka Yok";
+  yokOpt.value = PLAKA_YOK; yokOpt.textContent = "Plaka Yok";
   sel.appendChild(yokOpt);
   if (current) sel.value = current;
 }
@@ -195,6 +224,75 @@ function renderPlakaManagementList(){
   });
 }
 
+function renderSoforList(){
+  var container = document.getElementById("soforList");
+  if (!container) return;
+  if (plakaListesi.length === 0){
+    container.innerHTML = '<div class="empty" style="padding:16px;">Once Plaka Yonetiminden plaka ekleyin.</div>';
+    return;
+  }
+  var html = "";
+  for (var i = 0; i < plakaListesi.length; i++){
+    var p = plakaListesi[i];
+    html += '<div class="sofor-item">';
+    html += '  <span class="plaka">' + escapeHtml(p) + '</span>';
+    html += '  <input type="text" value="' + escapeAttr(soforAdi(p)) + '" data-plaka="' + escapeAttr(p) + '" placeholder="Sofor adi" />';
+    html += '  <button type="button" data-plaka="' + escapeAttr(p) + '">Kaydet</button>';
+    html += '</div>';
+  }
+  container.innerHTML = html;
+  container.querySelectorAll("button[data-plaka]").forEach(function(btn){
+    btn.addEventListener("click", async function(){
+      var plaka = btn.getAttribute("data-plaka");
+      var input = container.querySelector('input[data-plaka="' + plaka + '"]');
+      var status = document.getElementById("soforStatus");
+      status.textContent = "Kaydediliyor...";
+      try {
+        var field = {}; field[normalizePlate(plaka)] = input.value.trim();
+        await setDoc(soforDocRef, field, { merge: true });
+        status.textContent = "Kaydedildi.";
+      } catch (e) { status.textContent = "Kaydedilemedi: " + e.message; }
+    });
+  });
+}
+
+function renderBasari(){
+  var body = document.getElementById("basariBody");
+  if (!basariData || !basariData.topPlaka){
+    body.innerHTML = '<div class="empty">Henuz karsilastirma verisi yok. Yeni bir Excel yuklendiginde otomatik hesaplanacak.</div>';
+    return;
+  }
+  var isim = soforAdi(basariData.topPlaka);
+  var html = '<div class="basari-box">';
+  html += '  <div class="trophy">🏆</div>';
+  html += '  <div class="plate">' + escapeHtml(basariData.topPlaka) + '</div>';
+  if (isim) html += '  <div class="sofor">' + escapeHtml(isim) + '</div>';
+  html += '  <div class="amount">' + fmtMoney(basariData.topCollected) + '</div>';
+  html += '  <div class="caption">Son Excel yuklemesinde en cok tahsilat yapan plaka</div>';
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+// ---------- Yonetici filtreleri ----------
+
+function populateAdminFilters(){
+  var k1sel = document.getElementById("filterKategori1");
+  var pksel = document.getElementById("filterPlaka");
+  if (!k1sel || !pksel) return;
+
+  var kategori1ler = Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a,b){ return a.localeCompare(b,"tr"); });
+  var curK1 = k1sel.value;
+  k1sel.innerHTML = '<option value="">Tum Bolgeler</option>';
+  kategori1ler.forEach(function(k){ var o = document.createElement("option"); o.value = k; o.textContent = k; k1sel.appendChild(o); });
+  if (curK1) k1sel.value = curK1;
+
+  var curPk = pksel.value;
+  pksel.innerHTML = '<option value="">Tum Plakalar</option>';
+  plakaListesi.forEach(function(p){ var o = document.createElement("option"); o.value = p; o.textContent = p; pksel.appendChild(o); });
+  var yokOpt = document.createElement("option"); yokOpt.value = PLAKA_YOK; yokOpt.textContent = "Plaka Yok"; pksel.appendChild(yokOpt);
+  if (curPk) pksel.value = curPk;
+}
+
 // ---------- Gece kilidi (sadece plasiyer) ----------
 
 function computeLastCutoff(now){
@@ -216,15 +314,25 @@ function hideNightLock(){ var el = document.getElementById("nightLock"); if (el)
 // ---------- Rol bazli gorunur liste ----------
 
 function getVisibleCariler(){
+  var base = cariler;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
-    return cariler.filter(function(c){
+    base = cariler.filter(function(c){
       if (wantYok) return !c.plaka;
       if (!c.plaka) return false;
       return currentPlakalar.indexOf(normalizePlate(c.plaka)) !== -1;
     });
+  } else if (currentRole === "admin"){
+    var k1 = document.getElementById("filterKategori1") ? document.getElementById("filterKategori1").value : "";
+    var pk = document.getElementById("filterPlaka") ? document.getElementById("filterPlaka").value : "";
+    base = cariler.filter(function(c){
+      if (k1 && c.kategori1 !== k1) return false;
+      if (pk === PLAKA_YOK && c.plaka) return false;
+      if (pk && pk !== PLAKA_YOK && normalizePlate(c.plaka) !== normalizePlate(pk)) return false;
+      return true;
+    });
   }
-  return cariler;
+  return base;
 }
 
 function pendingPaymentsIn(list){
@@ -253,16 +361,17 @@ function render(){
       html += '<div class="row' + cls + '" data-id="' + escapeAttr(c.id) + '">';
       html += '  <div class="left">';
       html += '    <div class="name">' + escapeHtml(c.name) + '</div>';
-      if (c.kategori1 || c.plaka){
-        html += '    <div class="tags">';
-        if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
-        html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
-        html += '    </div>';
-      }
+      html += '    <div class="tags">';
+      if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
+      html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
+      html += '    </div>';
       if (c.note) html += '    <div class="note-preview">' + escapeHtml(c.note) + '</div>';
       if (c.due) html += '    <div class="due">Odeme bekleniyor: ' + escapeHtml(fmtDateISOtoTR(c.due)) + '</div>';
       if (c.paymentReported){
         html += '    <div class="paidline">✅ Odeme bildirildi: ' + fmtMoney(c.paymentAmount) + (c.paymentReviewed ? " (onaylandi)" : " (bekliyor)") + '</div>';
+      }
+      if (c.rejectionReason){
+        html += '    <div class="rejectline">⚠️ Reddedildi: ' + escapeHtml(c.rejectionReason) + '</div>';
       }
       if (c.lastEditedBy){
         html += '    <div class="editor">Son duzenleyen: ' + escapeHtml(c.lastEditedBy) + (c.lastEditedAtLabel ? " - " + escapeHtml(c.lastEditedAtLabel) : "") + '</div>';
@@ -371,9 +480,12 @@ function openDetail(id){
   if (!c) return;
 
   document.getElementById("detailName").textContent = c.name;
-  document.getElementById("detailEditor").textContent = c.lastEditedBy
+  var editorText = c.lastEditedBy
     ? "Son duzenleyen: " + c.lastEditedBy + (c.lastEditedAtLabel ? " - " + c.lastEditedAtLabel : "")
     : "Henuz kimse duzenlemedi.";
+  if (c.rejectionReason) editorText += " | ⚠️ Reddedildi: " + c.rejectionReason;
+  document.getElementById("detailEditor").textContent = editorText;
+
   var metaParts = [];
   if (c.kategori1) metaParts.push("Bolge: " + c.kategori1);
   metaParts.push("Plaka: " + (c.plaka || "Yok"));
@@ -406,7 +518,9 @@ function closeDetail(){
 }
 function editorLabel(){
   if (currentRole === "admin") return currentUserName + " (yonetici)";
-  return (currentPlakalar[0] || "?") + " (plasiyer)";
+  var plaka = currentPlakalar[0] || "?";
+  var isim = soforAdi(plaka);
+  return plaka + (isim ? " - " + isim : "") + " (plasiyer)";
 }
 
 async function writeHistory(c, data){
@@ -443,11 +557,11 @@ async function saveCurrentNote(){
     updatedAt: serverTimestamp(),
     lastEditedAt: serverTimestamp()
   };
-  // yeni bir odeme bildirimi ise onay durumunu sifirla; bildirim kaldirildiysa da temizle
   if (paid && !(c && c.paymentReported)){
     data.paymentReportedBy = editorLabel();
     data.paymentReportedAt = serverTimestamp();
     data.paymentReviewed = false;
+    data.rejectionReason = ""; // yeni bildirim eski red notunu temizler
   } else if (!paid){
     data.paymentReviewed = false;
     data.paymentReportedBy = "";
@@ -464,15 +578,7 @@ async function saveCurrentNote(){
   }
 }
 
-async function deleteCurrent(){
-  if (!currentDocId) return;
-  if (!confirm("Bu cariyi tamamen silmek istediginize emin misiniz?")) return;
-  var status = document.getElementById("saveStatus");
-  try { await deleteDoc(doc(db, CARI_COLLECTION, currentDocId)); closeDetail(); }
-  catch (e) { status.textContent = "Silinemedi: " + e.message; }
-}
-
-// ---------- Odeme bildirimleri paneli ----------
+// ---------- Odeme bildirimleri paneli (onayla / reddet / notu temizle / iptal) ----------
 
 function renderPaymentList(){
   var visible = getVisibleCariler();
@@ -492,6 +598,7 @@ function renderPaymentList(){
     html += '  <div class="ractions">';
     if (currentRole === "admin"){
       html += '<button type="button" class="approve" data-act="approve">Onayla</button>';
+      html += '<button type="button" class="reject" data-act="reject">Reddet</button>';
       html += '<button type="button" class="clearnote" data-act="clearnote">Notu Temizle</button>';
     } else {
       html += '<button type="button" class="cancel" data-act="cancel">Bildirimi Iptal Et</button>';
@@ -510,23 +617,41 @@ function renderPaymentList(){
 
 async function handlePaymentAction(id, action){
   var status = document.getElementById("paymentStatus");
-  status.textContent = "Isleniyor...";
   try {
     if (action === "approve"){
-      await setDoc(doc(db, CARI_COLLECTION, id), { paymentReviewed: true, lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp() }, { merge: true });
+      status.textContent = "Isleniyor...";
+      await setDoc(doc(db, CARI_COLLECTION, id), {
+        paymentReviewed: true, rejectionReason: "",
+        lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
+      }, { merge: true });
+      status.textContent = "Onaylandi.";
+    } else if (action === "reject"){
+      var reason = prompt("Reddetme sebebini yazin (orn: Odeme yetersiz, yarin POS cektir):", "");
+      if (reason === null) return;
+      if (!reason.trim()){ status.textContent = "Sebep girmeden reddedemezsiniz."; return; }
+      status.textContent = "Isleniyor...";
+      await setDoc(doc(db, CARI_COLLECTION, id), {
+        paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "",
+        rejectionReason: reason.trim(), rejectedBy: editorLabel(), rejectedAt: serverTimestamp(),
+        lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
+      }, { merge: true });
+      status.textContent = "Reddedildi.";
     } else if (action === "clearnote"){
+      status.textContent = "Isleniyor...";
       await setDoc(doc(db, CARI_COLLECTION, id), {
         note: "", due: "", flagged: false,
-        paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "",
+        paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "", rejectionReason: "",
         lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
       }, { merge: true });
+      status.textContent = "Not temizlendi.";
     } else if (action === "cancel"){
+      status.textContent = "Isleniyor...";
       await setDoc(doc(db, CARI_COLLECTION, id), {
         paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "",
         lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
       }, { merge: true });
+      status.textContent = "Iptal edildi.";
     }
-    status.textContent = "Islendi.";
   } catch (e) {
     status.textContent = "Islenemedi: " + e.message;
   }
@@ -537,9 +662,10 @@ async function handlePaymentAction(id, action){
 var historyEntries = [];
 
 function watchHistory(){
+  if (unsubHistory) unsubHistory();
   try {
     var q = query(collection(db, HISTORY_COLLECTION), orderBy("editedAt", "desc"), limit(200));
-    onSnapshot(q, function(snap){
+    unsubHistory = onSnapshot(q, function(snap){
       historyEntries = [];
       snap.forEach(function(d){
         var x = d.data();
@@ -606,29 +732,37 @@ async function handleExcelUpload(file){
       colIndex[rc.label] = idx;
       if (idx === -1) missing.push(rc.label);
     });
-
     if (missing.length > 0){
       alert('Excel dosyasinda su kolon(lar) eksik: ' + missing.join(", ") + '.\n\n' + requiredColumnsText());
       label.textContent = "Excel Yukle (.xlsx)";
       return;
     }
 
-    var kodCol = colIndex["Kod"];
     var unvanCol = colIndex["Ünvan"];
     var kategori1Col = colIndex["Cari Kategori 1"];
     var plakaCol = colIndex["Cari Kategori 5"];
     var debtCol = colIndex["Borç Bak."];
+    var kodCol = findCol(headers, ["kod"]); // zorunlu degil, varsa daha saglam id icin kullanilir
+
+    // "onceki" plaka bazli toplam bakiyeler (bu yuklemeden hemen once, mevcut canli veriden)
+    var beforeTotals = {};
+    cariler.forEach(function(c){
+      if (!c.plaka) return;
+      var np = normalizePlate(c.plaka);
+      beforeTotals[np] = (beforeTotals[np] || 0) + (c.debt || 0);
+    });
 
     label.textContent = "Yukleniyor 0/" + (rows.length - 1);
     var count = 0, total = rows.length - 1;
     var yeniPlakalar = {};
+    var afterTotals = {};
 
     for (var i = 1; i < rows.length; i++){
       var r = rows[i];
       var nm = (r[unvanCol] || "").toString().trim();
       if (!nm) continue;
 
-      var kod = (r[kodCol] || "").toString().trim();
+      var kod = kodCol !== -1 ? (r[kodCol] || "").toString().trim() : "";
       var kategori1 = (r[kategori1Col] || "").toString().trim();
       var plaka = (r[plakaCol] || "").toString().trim();
       var debt = parseNumber(r[debtCol]);
@@ -638,7 +772,11 @@ async function handleExcelUpload(file){
         name: nm, kod: kod, kategori1: kategori1, plaka: plaka, debt: debt, updatedAt: serverTimestamp()
       }, { merge: true });
 
-      if (plaka) yeniPlakalar[normalizePlate(plaka)] = plaka.toUpperCase().replace(/\s+/g, "");
+      if (plaka){
+        var npNew = normalizePlate(plaka);
+        yeniPlakalar[npNew] = plaka.toUpperCase().replace(/\s+/g, "");
+        afterTotals[npNew] = (afterTotals[npNew] || 0) + debt;
+      }
       count++;
       label.textContent = "Yukleniyor " + count + "/" + total;
     }
@@ -648,6 +786,22 @@ async function handleExcelUpload(file){
     if (eklenecekler.length > 0 && plakaDocRef){
       try { await setDoc(plakaDocRef, { list: arrayUnion.apply(null, eklenecekler) }, { merge: true }); }
       catch (e) { console.error("[cariTakip] plaka listesi guncellenemedi:", e); }
+    }
+
+    // gunun basarisi: bu excelde gecen plakalar icin (once - sonra) farki
+    var topPlaka = null, topCollected = -Infinity;
+    Object.keys(afterTotals).forEach(function(np){
+      var before = beforeTotals[np] || 0;
+      var after = afterTotals[np];
+      var collected = before - after;
+      if (collected > topCollected){ topCollected = collected; topPlaka = yeniPlakalar[np]; }
+    });
+    if (topPlaka && topCollected > 0 && basariDocRef){
+      try {
+        await setDoc(basariDocRef, {
+          topPlaka: topPlaka, topCollected: topCollected, hesaplananTarih: serverTimestamp()
+        }, { merge: false });
+      } catch (e) { console.error("[cariTakip] basari kaydi yazilamadi:", e); }
     }
 
     if (metaDocRef){
@@ -667,8 +821,9 @@ async function handleExcelUpload(file){
 
 function initRealtime(){
   setConnStatus("Baglaniyor...", false);
+  if (unsubCariler) unsubCariler();
   try {
-    onSnapshot(collection(db, CARI_COLLECTION), function(snapshot){
+    unsubCariler = onSnapshot(collection(db, CARI_COLLECTION), function(snapshot){
       cariler = [];
       snapshot.forEach(function(docSnap){
         var d = docSnap.data();
@@ -678,10 +833,12 @@ function initRealtime(){
           debt: d.debt || 0, note: d.note || "", due: d.due || "", flagged: !!d.flagged,
           paymentReported: !!d.paymentReported, paymentAmount: d.paymentAmount || 0,
           paymentReviewed: !!d.paymentReviewed, paymentReportedBy: d.paymentReportedBy || "",
+          rejectionReason: d.rejectionReason || "",
           lastEditedBy: d.lastEditedBy || "", lastEditedAtLabel: fmtTimestamp(d.lastEditedAt)
         });
       });
       setConnStatus("Canli baglanti aktif", true);
+      populateAdminFilters();
       render();
       if (document.getElementById("paymentOverlay").classList.contains("show")) renderPaymentList();
     }, function(error){
@@ -706,6 +863,25 @@ function wireHamburger(){
 
   on("menuLogout", "click", function(e){ e.preventDefault(); logout(); });
 
+  on("menuPlakaDegistir", "click", function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    switchPlaka();
+  });
+
+  on("menuSoforTanimlama", "click", function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    if (currentRole !== "admin"){ alert("Sofor tanimlama sadece yoneticiler icindir."); return; }
+    renderSoforList();
+    document.getElementById("soforStatus").textContent = "";
+    document.getElementById("soforOverlay").classList.add("show");
+  });
+
+  on("menuBasari", "click", function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    renderBasari();
+    document.getElementById("basariOverlay").classList.add("show");
+  });
+
   on("menuPlakaYonetimi", "click", function(e){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ alert("Plaka yonetimi sadece yoneticiler icindir."); return; }
@@ -727,6 +903,12 @@ function wireHamburger(){
   on("addPlakaBtn", "click", addPlaka);
   on("newPlakaInput", "keydown", function(e){ if (e.key === "Enter") addPlaka(); });
 
+  on("closeSoforBtn", "click", function(){ document.getElementById("soforOverlay").classList.remove("show"); });
+  on("soforOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+
+  on("closeBasariBtn", "click", function(){ document.getElementById("basariOverlay").classList.remove("show"); });
+  on("basariOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+
   on("closeHistoryBtn", "click", function(){ document.getElementById("historyOverlay").classList.remove("show"); });
   on("historyOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
   on("historySearch", "input", renderHistoryList);
@@ -739,10 +921,31 @@ function wireHamburger(){
   on("closePaymentBtn", "click", function(){ document.getElementById("paymentOverlay").classList.remove("show"); });
   on("paymentOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
 
-  if (currentRole !== "admin"){
-    var mp = document.getElementById("menuPlakaYonetimi"); if (mp) mp.classList.add("hidden");
-    var mg = document.getElementById("menuGecmis"); if (mg) mg.classList.add("hidden");
+  applyMenuVisibility();
+}
+
+function applyMenuVisibility(){
+  var mp = document.getElementById("menuPlakaYonetimi");
+  var mg = document.getElementById("menuGecmis");
+  var ms = document.getElementById("menuSoforTanimlama");
+  var md = document.getElementById("menuPlakaDegistir");
+  if (currentRole === "admin"){
+    if (mp) mp.classList.remove("hidden");
+    if (mg) mg.classList.remove("hidden");
+    if (ms) ms.classList.remove("hidden");
+    if (md) md.classList.add("hidden");
+  } else {
+    if (mp) mp.classList.add("hidden");
+    if (mg) mg.classList.add("hidden");
+    if (ms) ms.classList.add("hidden");
+    if (md) md.classList.remove("hidden");
   }
+}
+
+function switchPlaka(){
+  document.getElementById("appRoot").classList.add("locked");
+  document.getElementById("lockScreen").classList.remove("hidden");
+  showSalesForm();
 }
 
 // ---------- Olay baglama ----------
@@ -755,10 +958,14 @@ function wirePaidSwitch(){
   });
 }
 
+function wireAdminFilters(){
+  on("filterKategori1", "change", render);
+  on("filterPlaka", "change", render);
+}
+
 function wireEvents(){
   on("flagSwitch", "click", function(){ this.classList.toggle("on"); });
   on("closeBtn", "click", closeDetail);
-  on("deleteBtn", "click", deleteCurrent);
   on("overlay", "click", function(e){ if (e.target === this) closeDetail(); });
   on("saveBtn", "click", saveCurrentNote);
   on("searchBox", "input", render);
@@ -766,6 +973,7 @@ function wireEvents(){
   wireCalendar();
   wireHamburger();
   wirePaidSwitch();
+  wireAdminFilters();
 }
 
 function logout(){
@@ -778,22 +986,24 @@ function logout(){
 
 function applyRoleUI(){
   var uploadRow = document.getElementById("uploadRow");
-  var deleteBtn = document.getElementById("deleteBtn");
   var userInfo = document.getElementById("userInfo");
   var reqCols = document.getElementById("requiredCols");
+  var filterRow = document.getElementById("adminFilterRow");
 
   if (currentRole === "admin"){
     uploadRow.classList.remove("hidden");
-    deleteBtn.classList.remove("hidden");
+    filterRow.classList.remove("hidden");
     reqCols.textContent = requiredColumnsText();
     userInfo.innerHTML = 'Yonetici: <b>' + escapeHtml(currentUserName) + '</b>';
   } else {
     uploadRow.classList.add("hidden");
-    deleteBtn.classList.add("hidden");
+    filterRow.classList.add("hidden");
     reqCols.textContent = "";
     var plakaLabel = currentPlakalar[0] === PLAKA_YOK ? "Plaka Yok" : (currentPlakalar[0] || "");
-    userInfo.innerHTML = 'Plasiyer: <b>' + escapeHtml(plakaLabel) + '</b>';
+    var isim = currentPlakalar[0] === PLAKA_YOK ? "" : soforAdi(plakaLabel);
+    userInfo.innerHTML = 'Plasiyer: <b>' + escapeHtml(plakaLabel) + (isim ? " - " + escapeHtml(isim) : "") + '</b>';
   }
+  applyMenuVisibility();
 }
 
 function unlockApp(){
@@ -801,11 +1011,12 @@ function unlockApp(){
   document.getElementById("lockScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("locked");
   applyRoleUI();
-  wireEvents();
+  if (!appWired){ wireEvents(); appWired = true; }
   initRealtime();
-  watchHistory();
+  if (currentRole === "admin") watchHistory();
   checkNightLock();
-  setInterval(checkNightLock, 60 * 1000);
+  if (nightLockInterval) clearInterval(nightLockInterval);
+  nightLockInterval = setInterval(checkNightLock, 60 * 1000);
 }
 
 // ---------- Giris ekrani ----------
@@ -876,6 +1087,8 @@ function wireLoginScreen(){
 
 watchPlakaConfig();
 watchMeta();
+watchSofor();
+watchBasari();
 
 var alreadyUnlocked = false, savedRole = "", savedUserName = "", savedPlaka = "";
 try {
