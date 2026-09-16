@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Cari Takip</title>
+<title>LED Saha</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>%E2%9A%A1</text></svg>" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
@@ -183,6 +184,30 @@
   .basari-box .amount{ font-size:20px; font-weight:800; color:var(--ok); margin-top:10px; }
   .basari-box .caption{ font-size:10.5px; color:var(--muted); margin-top:6px; }
 
+  .tab-row{ display:flex; flex-wrap:wrap; gap:6px; }
+  .tab-btn{ background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:7px 11px; font-size:11px; cursor:pointer; }
+  .tab-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .inline-input-row{ display:none; gap:6px; margin-top:8px; }
+  .inline-input-row.show{ display:flex; }
+  .inline-input-row input{ flex:1; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px; font-size:12px; }
+  .inline-input-row button{ background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; }
+
+  .trend-bars{ display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; align-items:flex-end; }
+  .trend-col{ display:flex; flex-direction:column; align-items:center; flex:0 0 auto; width:36px; }
+  .trend-val{ font-size:7.5px; color:var(--muted); margin-bottom:2px; white-space:nowrap; }
+  .trend-bar-wrap{ height:90px; width:18px; background:var(--card2); border-radius:4px; display:flex; align-items:flex-end; overflow:hidden; }
+  .trend-bar{ width:100%; border-radius:4px 4px 0 0; }
+  .trend-bar.pos{ background:var(--ok); }
+  .trend-bar.neg{ background:var(--danger); }
+  .trend-label{ font-size:8px; color:var(--muted); margin-top:3px; }
+  .trend-summary{ margin-top:14px; font-size:12px; text-align:center; background:var(--card2); border-radius:8px; padding:9px; }
+  .date-range-row{ display:flex; gap:6px; align-items:center; }
+  .date-range-row input[type=date]{ flex:1; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px; font-size:11.5px; }
+  .date-range-row button{ background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+
+  #customModalMessage{ font-size:12.5px; line-height:1.6; white-space:pre-line; }
+  #customModalInput{ margin-top:10px; width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px; font-size:12px; }
+
   .history-item{ background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:6px; }
   .history-item .hname{ font-size:11.5px; font-weight:600; }
   .history-item .hmeta{ font-size:9.5px; color:var(--accent); margin-top:2px; }
@@ -200,7 +225,7 @@
 
 <div id="lockScreen">
   <div class="lock-box">
-    <h2>Cari Takip</h2>
+    <h2>LED Saha</h2>
     <div id="roleChoice">
       <p style="font-size:11px;color:var(--muted);margin:0 0 14px 0;">Giris turunu secin</p>
       <button type="button" class="role-btn sales" id="roleSalesBtn">Plasiyer Girisi</button>
@@ -233,10 +258,13 @@
 <div id="appRoot" class="locked">
 <div class="topbar">
   <div class="topbar-head">
-    <h1>Cari Takip <span id="cariCountLabel">(0)</span></h1>
+    <h1>LED Saha <span id="cariCountLabel">(0)</span></h1>
     <button class="icon-btn" id="paymentIconBtn">💰<span class="badge hidden" id="paymentBadge">0</span></button>
     <button class="icon-btn" id="hamburgerBtn">☰</button>
     <div id="hamburgerMenu" class="hidden">
+      <a href="#" id="menuTahsilatDurumu">📊 Tahsilat Durumu</a>
+      <a href="#" id="menuOdemeBekleyen">⏰ Odeme Bekleyenler</a>
+      <a href="#" id="menuTrend">📈 Tahsilat Trendi</a>
       <a href="#" id="menuPlakaDegistir">🔄 Plaka Degistir</a>
       <a href="#" id="menuSoforTanimlama">🧑‍✈️ Sofor Tanimlama</a>
       <a href="#" id="menuBasari">🏆 Dunun Basarisi</a>
@@ -410,6 +438,78 @@
     </div>
     <div class="sheet-footer">
       <button class="btn close" id="closeBasariBtn" style="width:100%;">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="tahsilatOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Tahsilat Durumu</h2><div class="sub">Son tahsilat tarihine gore gecikmis cariler</div></div>
+    <div class="sheet-body">
+      <div class="tab-row">
+        <button type="button" class="tab-btn" id="tabGunSayisi">Gun Sayisi Gir</button>
+        <button type="button" class="tab-btn" id="tab1Ay">1 Aylik</button>
+        <button type="button" class="tab-btn" id="tab2Ay">2 Aylik</button>
+        <button type="button" class="tab-btn" id="tab3Ay">3 Aylik</button>
+        <button type="button" class="tab-btn" id="tab3AyUstu">3 Aydan Fazla</button>
+      </div>
+      <div class="inline-input-row" id="gunSayisiRow">
+        <input type="number" id="gunSayisiInput" placeholder="Gun sayisi, orn: 21" />
+        <button type="button" id="gunSayisiGosterBtn">Goster</button>
+      </div>
+      <div id="tahsilatResults" style="margin-top:10px;"></div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn close" id="closeTahsilatBtn" style="width:100%;">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="odemeBekleyenOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Odeme Bekleyenler</h2><div class="sub">Odeme tarihi girilmis cariler</div></div>
+    <div class="sheet-body">
+      <div class="tab-row">
+        <button type="button" class="tab-btn" id="tabSortDate">Tarihe Gore</button>
+        <button type="button" class="tab-btn" id="tabSortDebt">Bakiyeye Gore</button>
+      </div>
+      <div id="odemeBekleyenResults" style="margin-top:10px;"></div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn close" id="closeOdemeBekleyenBtn" style="width:100%;">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="trendOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Tahsilat Trendi</h2><div class="sub">Secili tarih araliginda gunluk net tahsilat (tum plakalar toplami)</div></div>
+    <div class="sheet-body">
+      <div class="date-range-row">
+        <input type="date" id="trendStartDate" />
+        <input type="date" id="trendEndDate" />
+        <button type="button" id="trendGosterBtn">Goster</button>
+      </div>
+      <div id="trendChartArea" style="margin-top:14px;"></div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn close" id="closeTrendBtn" style="width:100%;">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="customModalOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2 id="customModalTitle">Bilgi</h2></div>
+    <div class="sheet-body">
+      <div id="customModalMessage"></div>
+      <input type="text" id="customModalInput" class="hidden" />
+    </div>
+    <div class="sheet-footer">
+      <div class="btn-row">
+        <button class="btn close hidden" id="customModalCancelBtn">Iptal</button>
+        <button class="btn save" id="customModalOkBtn">Tamam</button>
+      </div>
     </div>
   </div>
 </div>
