@@ -3,7 +3,7 @@
 
 import { db } from "./firebase-core.js";
 import {
-  collection, doc, setDoc, onSnapshot, getDoc,
+  collection, doc, setDoc, onSnapshot, getDoc, getDocs,
   serverTimestamp, arrayUnion, arrayRemove,
   query, orderBy, limit
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
@@ -114,6 +114,50 @@ function on(id, ev, fn){
   var el = document.getElementById(id);
   if (!el){ console.error("[cariTakip] HATA: '" + id + "' bulunamadi (index.html/app.js uyumsuz olabilir)."); return; }
   el.addEventListener(ev, fn);
+}
+
+// ---------- Ozel modal (alert/confirm/prompt yerine) ----------
+
+var modalResolve = null;
+var modalType = null;
+
+function openCustomModal(type, title, message, placeholder){
+  modalType = type;
+  document.getElementById("customModalTitle").textContent = title;
+  document.getElementById("customModalMessage").textContent = message;
+  var input = document.getElementById("customModalInput");
+  if (type === "prompt"){
+    input.classList.remove("hidden");
+    input.value = "";
+    input.placeholder = placeholder || "";
+    setTimeout(function(){ input.focus(); }, 60);
+  } else {
+    input.classList.add("hidden");
+  }
+  document.getElementById("customModalCancelBtn").classList.toggle("hidden", type === "alert");
+  document.getElementById("customModalOverlay").classList.add("show");
+  return new Promise(function(resolve){ modalResolve = resolve; });
+}
+function resolveCustomModal(val){
+  document.getElementById("customModalOverlay").classList.remove("show");
+  if (modalResolve){ var r = modalResolve; modalResolve = null; r(val); }
+}
+function customAlert(message, title){ return openCustomModal("alert", title || "Bilgi", message); }
+function customConfirm(message, title){ return openCustomModal("confirm", title || "Emin misiniz?", message); }
+function customPrompt(message, title, placeholder){ return openCustomModal("prompt", title || "Bilgi Girin", message, placeholder); }
+
+function wireCustomModal(){
+  on("customModalOkBtn", "click", function(){
+    if (modalType === "prompt") resolveCustomModal(document.getElementById("customModalInput").value);
+    else resolveCustomModal(true);
+  });
+  on("customModalCancelBtn", "click", function(){
+    resolveCustomModal(modalType === "prompt" ? null : false);
+  });
+  on("customModalInput", "keydown", function(e){ if (e.key === "Enter") document.getElementById("customModalOkBtn").click(); });
+  on("customModalOverlay", "click", function(e){
+    if (e.target === this) resolveCustomModal(modalType === "prompt" ? null : false);
+  });
 }
 function soforAdi(plaka){ return soforMap[normalizePlate(plaka)] || ""; }
 
@@ -234,7 +278,8 @@ async function addPlaka(){
   } catch (e) { status.textContent = "Eklenemedi: " + e.message; }
 }
 async function removePlaka(plaka){
-  if (!confirm('"' + plaka + '" plakasini kaldirmak istediginize emin misiniz?')) return;
+  var ok = await customConfirm('"' + plaka + '" plakasini kaldirmak istediginize emin misiniz?', "Plaka Sil");
+  if (!ok) return;
   var status = document.getElementById("plakaStatus");
   status.textContent = "Kaldiriliyor...";
   try {
@@ -368,7 +413,7 @@ function render(){
   var q = document.getElementById("searchBox").value.toLocaleLowerCase("tr").trim();
   var visible = getVisibleCariler();
   var filtered = visible.filter(function(c){ return !q || c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
-  if (activeQuickFilter === "flagged") filtered = filtered.filter(function(c){ return c.flagged; });
+  if (activeQuickFilter === "flagged") filtered = filtered.filter(function(c){ return effFlagged(c); });
   if (activeQuickFilter === "noted") filtered = filtered.filter(function(c){ return !!c.note; });
 
   if (visible.length === 0){
@@ -382,7 +427,8 @@ function render(){
     var html = "";
     for (var i = 0; i < filtered.length; i++){
       var c = filtered[i];
-      var cls = c.flagged ? " flagged" : (c.paymentReported ? " paid" : "");
+      var isFlagged = effFlagged(c);
+      var cls = isFlagged ? " flagged" : (c.paymentReported ? " paid" : "");
       var debtClass = (c.debt || 0) === 0 ? " zero" : "";
       html += '<div class="row' + cls + '" data-id="' + escapeAttr(c.id) + '">';
       html += '  <div class="left">';
@@ -406,7 +452,7 @@ function render(){
       html += '  </div>';
       html += '  <div class="right">';
       html += '    <div class="debt' + debtClass + '">' + fmtMoney(c.debt) + '</div>';
-      if (c.flagged) html += '    <div class="badgetxt">SORUNLU</div>';
+      if (isFlagged) html += '    <div class="badgetxt">' + (c.flagged ? "SORUNLU" : "SORUNLU (" + AUTO_FLAG_DAYS + "+ gun)") + '</div>';
       html += '  </div>';
       html += '</div>';
     }
@@ -419,7 +465,7 @@ function render(){
   document.getElementById("cariCountLabel").textContent = "(" + visible.length + ")";
   document.getElementById("sumNoted").textContent = visible.filter(function(c){ return !!c.note; }).length;
   document.getElementById("sumDebt").textContent = fmtMoney(visible.reduce(function(s, c){ return s + (c.debt || 0); }, 0));
-  document.getElementById("sumFlag").textContent = visible.filter(function(c){ return c.flagged; }).length;
+  document.getElementById("sumFlag").textContent = visible.filter(function(c){ return effFlagged(c); }).length;
 
   document.getElementById("chipNoted").classList.toggle("active", activeQuickFilter === "noted");
   document.getElementById("chipFlag").classList.toggle("active", activeQuickFilter === "flagged");
@@ -515,6 +561,10 @@ function openDetail(id){
     ? "Son duzenleyen: " + c.lastEditedBy + (c.lastEditedAtLabel ? " - " + c.lastEditedAtLabel : "")
     : "Henuz kimse duzenlemedi.";
   if (c.rejectionReason) editorText += " | ⚠️ Reddedildi: " + c.rejectionReason;
+  if (!c.flagged && isAutoFlagged(c)){
+    var ds = daysSinceCollection(c);
+    editorText += " | ⚠️ Otomatik sorunlu: " + (ds === null ? "hic tahsilat yok" : ds + " gundur tahsilat yok");
+  }
   document.getElementById("detailEditor").textContent = editorText;
 
   var metaParts = [];
@@ -569,7 +619,8 @@ async function writeHistory(c, data){
 
 async function clearCurrentDetail(){
   if (!currentDocId) return;
-  if (!confirm("Bu carinin notu, tarihi, sorunlu isareti ve odeme bildirimi tamamen temizlensin mi? Isim/kategori/plaka/bakiye bilgisi degismez.")) return;
+  var ok = await customConfirm("Bu carinin notu, tarihi, sorunlu isareti ve odeme bildirimi tamamen temizlensin mi? Isim/kategori/plaka/bakiye bilgisi degismez.", "Temizle");
+  if (!ok) return;
   var status = document.getElementById("saveStatus");
   status.textContent = "Temizleniyor...";
   try {
@@ -678,9 +729,9 @@ async function handlePaymentAction(id, action){
       }, { merge: true });
       status.textContent = "Onaylandi, not temizlendi.";
     } else if (action === "reject"){
-      var reason = prompt("Reddetme sebebini yazin (orn: Odeme yetersiz, yarin POS cektir):", "");
+      var reason = await customPrompt("Reddetme sebebini yazin:", "Odeme Reddi", "Orn: Odeme yetersiz, yarin POS cektir");
       if (reason === null) return;
-      if (!reason.trim()){ status.textContent = "Sebep girmeden reddedemezsiniz."; return; }
+      if (!reason.trim()){ await customAlert("Sebep girmeden reddedemezsiniz.", "Uyari"); return; }
       status.textContent = "Isleniyor...";
       await setDoc(doc(db, CARI_COLLECTION, id), {
         paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "",
@@ -744,6 +795,255 @@ function renderHistoryList(){
     html += '</div>';
   }
   container.innerHTML = html;
+}
+
+// ---------- Tahsilat Durumu (gecikmis cariler) ----------
+
+function parseTRDate(s){
+  if (!s) return null;
+  var parts = s.toString().split(".");
+  if (parts.length !== 3) return null;
+  var d = parseInt(parts[0], 10), m = parseInt(parts[1], 10), y = parseInt(parts[2], 10);
+  if (!d || !m || !y) return null;
+  var dt = new Date(y, m - 1, d);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+function daysBetween(a, b){ return Math.floor((b - a) / (1000 * 60 * 60 * 24)); }
+var AUTO_FLAG_DAYS = 90; // bu kadar gundur tahsilat yoksa otomatik "sorunlu" sayilir
+function daysSinceCollection(c){
+  var d = parseTRDate(c.sonTahTarihi);
+  if (!d) return null;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  return daysBetween(d, today);
+}
+function isAutoFlagged(c){
+  if (!c.sonTahTarihi) return true; // hic tahsilat tarihi yok -- otomatik sorunlu
+  var days = daysSinceCollection(c);
+  return days !== null && days >= AUTO_FLAG_DAYS;
+}
+function effFlagged(c){ return !!c.flagged || isAutoFlagged(c); }
+
+var activeAgingMode = null; // "custom" | "1ay" | "2ay" | "3ay" | "3ayustu"
+
+function computeAgingList(mode, customDays){
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var visible = getVisibleCariler();
+  return visible.filter(function(c){
+    var d = parseTRDate(c.sonTahTarihi);
+    if (!d){
+      // hic tahsilat tarihi girilmemis -- gun sayisi filtresinde ve "3 aydan fazla" grubunda gosterilir
+      return mode === "custom" || mode === "3ayustu";
+    }
+    var diff = daysBetween(d, today);
+    if (mode === "custom") return diff >= customDays;
+    if (mode === "1ay") return diff >= 30 && diff < 60;
+    if (mode === "2ay") return diff >= 60 && diff < 90;
+    if (mode === "3ay") return diff >= 90 && diff < 120;
+    if (mode === "3ayustu") return diff >= 120;
+    return false;
+  }).sort(function(a, b){
+    var da = parseTRDate(a.sonTahTarihi), db = parseTRDate(b.sonTahTarihi);
+    if (!da && !db) return 0;
+    if (!da) return -1;
+    if (!db) return 1;
+    return da - db;
+  });
+}
+
+function renderAgingResults(list){
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var container = document.getElementById("tahsilatResults");
+  if (list.length === 0){
+    container.innerHTML = '<div class="empty" style="padding:20px;">Bu kritere uyan cari bulunamadi.</div>';
+    return;
+  }
+  var html = "";
+  list.forEach(function(c){
+    var d = parseTRDate(c.sonTahTarihi);
+    var daysTxt = d ? (daysBetween(d, today) + " gun once") : "Hic tahsilat yok";
+    html += '<div class="history-item">';
+    html += '  <div class="hname">' + escapeHtml(c.name) + '</div>';
+    html += '  <div class="hmeta">' + escapeHtml(c.plaka || "Plaka yok") + ' | Son tahsilat: ' + escapeHtml(c.sonTahTarihi || "-") + ' (' + daysTxt + ')</div>';
+    html += '  <div class="hnote">Bakiye: ' + fmtMoney(c.debt) + '</div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function setAgingTabActive(id){
+  ["tabGunSayisi", "tab1Ay", "tab2Ay", "tab3Ay", "tab3AyUstu"].forEach(function(tid){
+    document.getElementById(tid).classList.toggle("active", tid === id);
+  });
+}
+
+function openTahsilatPanel(){
+  document.getElementById("gunSayisiRow").classList.remove("show");
+  document.getElementById("tahsilatResults").innerHTML = '<div class="empty" style="padding:20px;">Yukaridan bir kriter secin.</div>';
+  setAgingTabActive(null);
+  activeAgingMode = null;
+  document.getElementById("tahsilatOverlay").classList.add("show");
+}
+
+function wireTahsilatPanel(){
+  on("closeTahsilatBtn", "click", function(){ document.getElementById("tahsilatOverlay").classList.remove("show"); });
+  on("tahsilatOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+
+  on("tabGunSayisi", "click", function(){
+    setAgingTabActive("tabGunSayisi");
+    document.getElementById("gunSayisiRow").classList.add("show");
+  });
+  on("tab1Ay", "click", function(){ setAgingTabActive("tab1Ay"); document.getElementById("gunSayisiRow").classList.remove("show"); renderAgingResults(computeAgingList("1ay")); });
+  on("tab2Ay", "click", function(){ setAgingTabActive("tab2Ay"); document.getElementById("gunSayisiRow").classList.remove("show"); renderAgingResults(computeAgingList("2ay")); });
+  on("tab3Ay", "click", function(){ setAgingTabActive("tab3Ay"); document.getElementById("gunSayisiRow").classList.remove("show"); renderAgingResults(computeAgingList("3ay")); });
+  on("tab3AyUstu", "click", function(){ setAgingTabActive("tab3AyUstu"); document.getElementById("gunSayisiRow").classList.remove("show"); renderAgingResults(computeAgingList("3ayustu")); });
+
+  on("gunSayisiGosterBtn", "click", function(){
+    var val = parseInt(document.getElementById("gunSayisiInput").value, 10);
+    if (isNaN(val) || val < 0){ customAlert("Gecerli bir gun sayisi girin.", "Uyari"); return; }
+    renderAgingResults(computeAgingList("custom", val));
+  });
+}
+
+// ---------- Odeme Bekleyenler ----------
+
+var activeOdemeSort = "date";
+
+function renderOdemeBekleyen(){
+  var visible = getVisibleCariler();
+  var list = visible.filter(function(c){ return !!c.due; });
+  if (activeOdemeSort === "debt"){
+    list.sort(function(a, b){ return (b.debt || 0) - (a.debt || 0); });
+  } else {
+    list.sort(function(a, b){ return new Date(a.due) - new Date(b.due); });
+  }
+  var container = document.getElementById("odemeBekleyenResults");
+  if (list.length === 0){
+    container.innerHTML = '<div class="empty" style="padding:20px;">Odeme beklenen cari yok.</div>';
+    return;
+  }
+  var html = "";
+  list.forEach(function(c){
+    html += '<div class="history-item">';
+    html += '  <div class="hname">' + escapeHtml(c.name) + '</div>';
+    html += '  <div class="hmeta">' + escapeHtml(c.plaka || "Plaka yok") + ' | Beklenen tarih: ' + escapeHtml(fmtDateISOtoTR(c.due)) + '</div>';
+    html += '  <div class="hnote">Bakiye: ' + fmtMoney(c.debt) + '</div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function setOdemeTabActive(id){
+  ["tabSortDate", "tabSortDebt"].forEach(function(tid){
+    document.getElementById(tid).classList.toggle("active", tid === id);
+  });
+}
+
+function openOdemeBekleyenPanel(){
+  activeOdemeSort = "date";
+  setOdemeTabActive("tabSortDate");
+  renderOdemeBekleyen();
+  document.getElementById("odemeBekleyenOverlay").classList.add("show");
+}
+
+function wireOdemeBekleyenPanel(){
+  on("closeOdemeBekleyenBtn", "click", function(){ document.getElementById("odemeBekleyenOverlay").classList.remove("show"); });
+  on("odemeBekleyenOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+  on("tabSortDate", "click", function(){ activeOdemeSort = "date"; setOdemeTabActive("tabSortDate"); renderOdemeBekleyen(); });
+  on("tabSortDebt", "click", function(){ activeOdemeSort = "debt"; setOdemeTabActive("tabSortDebt"); renderOdemeBekleyen(); });
+}
+
+// ---------- Tahsilat Trendi (tarih araligina gore gunluk net tahsilat) ----------
+
+async function loadTrendData(startStr, endStr){
+  var snap = await getDocs(collection(db, GUNLUK_BAKIYE_COLLECTION));
+  var byDate = {};
+  snap.forEach(function(d){
+    var data = d.data() || {};
+    var total = Object.keys(data).reduce(function(s, k){ return s + (data[k] || 0); }, 0);
+    byDate[d.id] = total;
+  });
+
+  var start = new Date(startStr + "T00:00:00");
+  var end = new Date(endStr + "T00:00:00");
+
+  // baslangictan hemen onceki bilinen toplami bul (ilk gunun farkini hesaplayabilmek icin)
+  var prevTotal = null;
+  var cursor = new Date(start); cursor.setDate(cursor.getDate() - 1);
+  for (var back = 0; back < 60; back++){
+    var ds = dateStr(cursor);
+    if (byDate.hasOwnProperty(ds)){ prevTotal = byDate[ds]; break; }
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  var series = [];
+  var d2 = new Date(start);
+  while (d2 <= end){
+    var ds2 = dateStr(d2);
+    var total = byDate.hasOwnProperty(ds2) ? byDate[ds2] : prevTotal;
+    var collected = (prevTotal !== null && total !== null) ? (prevTotal - total) : null;
+    series.push({ date: ds2, collected: collected });
+    if (total !== null) prevTotal = total;
+    d2.setDate(d2.getDate() + 1);
+  }
+  return series;
+}
+
+function renderTrendChart(series){
+  var container = document.getElementById("trendChartArea");
+  var validPoints = series.filter(function(p){ return p.collected !== null; });
+  if (validPoints.length === 0){
+    container.innerHTML = '<div class="empty">Bu tarih araligi icin yeterli veri yok.<br/>En az iki ardisik gunluk Excel yuklemesi gerekiyor.</div>';
+    return;
+  }
+  var maxAbs = Math.max.apply(null, validPoints.map(function(p){ return Math.abs(p.collected); }).concat([1]));
+  var html = '<div class="trend-bars">';
+  series.forEach(function(p){
+    var pct = p.collected === null ? 0 : Math.max(Math.round((Math.abs(p.collected) / maxAbs) * 100), 3);
+    var isNeg = p.collected !== null && p.collected < 0;
+    var barClass = "trend-bar " + (isNeg ? "neg" : "pos");
+    var valTxt = p.collected === null ? "-" : fmtMoney(p.collected);
+    html += '<div class="trend-col">';
+    html += '  <div class="trend-val">' + escapeHtml(valTxt) + '</div>';
+    html += '  <div class="trend-bar-wrap">' + (p.collected === null ? "" : '<div class="' + barClass + '" style="height:' + pct + '%"></div>') + '</div>';
+    html += '  <div class="trend-label">' + escapeHtml(fmtDateISOtoTR(p.date).substring(0, 5)) + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  var totalCollected = validPoints.reduce(function(s, p){ return s + p.collected; }, 0);
+  html += '<div class="trend-summary">Secili aralikta net tahsilat: <b>' + fmtMoney(totalCollected) + '</b></div>';
+  container.innerHTML = html;
+}
+
+async function loadAndRenderTrend(){
+  var startStr = document.getElementById("trendStartDate").value;
+  var endStr = document.getElementById("trendEndDate").value;
+  if (!startStr || !endStr || startStr > endStr){
+    await customAlert("Gecerli bir tarih araligi secin (baslangic, bitisten once veya ayni gun olmali).", "Uyari");
+    return;
+  }
+  document.getElementById("trendChartArea").innerHTML = '<div class="empty">Yukleniyor...</div>';
+  try {
+    var series = await loadTrendData(startStr, endStr);
+    renderTrendChart(series);
+  } catch (e) {
+    document.getElementById("trendChartArea").innerHTML = '<div class="empty">Hata: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function openTrendPanel(){
+  var today = new Date();
+  var start = new Date(today); start.setDate(today.getDate() - 6);
+  document.getElementById("trendStartDate").value = dateStr(start);
+  document.getElementById("trendEndDate").value = dateStr(today);
+  document.getElementById("trendOverlay").classList.add("show");
+  loadAndRenderTrend();
+}
+
+function wireTrendPanel(){
+  on("closeTrendBtn", "click", function(){ document.getElementById("trendOverlay").classList.remove("show"); });
+  on("trendOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+  on("trendGosterBtn", "click", loadAndRenderTrend);
 }
 
 // ---------- Excel yukleme (sadece yonetici) ----------
@@ -956,14 +1256,30 @@ function wireHamburger(){
 
   on("menuLogout", "click", function(e){ e.preventDefault(); logout(); });
 
+  on("menuTahsilatDurumu", "click", function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    openTahsilatPanel();
+  });
+
+  on("menuOdemeBekleyen", "click", function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    openOdemeBekleyenPanel();
+  });
+
+  on("menuTrend", "click", async function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    if (currentRole !== "admin"){ await customAlert("Tahsilat trendi sadece yoneticiler icindir.", "Yetki Yok"); return; }
+    openTrendPanel();
+  });
+
   on("menuPlakaDegistir", "click", function(e){
     e.preventDefault(); menu.classList.add("hidden");
     switchPlaka();
   });
 
-  on("menuSoforTanimlama", "click", function(e){
+  on("menuSoforTanimlama", "click", async function(e){
     e.preventDefault(); menu.classList.add("hidden");
-    if (currentRole !== "admin"){ alert("Sofor tanimlama sadece yoneticiler icindir."); return; }
+    if (currentRole !== "admin"){ await customAlert("Sofor tanimlama sadece yoneticiler icindir.", "Yetki Yok"); return; }
     renderSoforList();
     document.getElementById("soforStatus").textContent = "";
     document.getElementById("soforOverlay").classList.add("show");
@@ -974,17 +1290,17 @@ function wireHamburger(){
     openBasariPanel();
   });
 
-  on("menuPlakaYonetimi", "click", function(e){
+  on("menuPlakaYonetimi", "click", async function(e){
     e.preventDefault(); menu.classList.add("hidden");
-    if (currentRole !== "admin"){ alert("Plaka yonetimi sadece yoneticiler icindir."); return; }
+    if (currentRole !== "admin"){ await customAlert("Plaka yonetimi sadece yoneticiler icindir.", "Yetki Yok"); return; }
     renderPlakaManagementList();
     document.getElementById("plakaStatus").textContent = "";
     document.getElementById("plakaOverlay").classList.add("show");
   });
 
-  on("menuGecmis", "click", function(e){
+  on("menuGecmis", "click", async function(e){
     e.preventDefault(); menu.classList.add("hidden");
-    if (currentRole !== "admin"){ alert("Gecmis kayitlari sadece yoneticiler icindir."); return; }
+    if (currentRole !== "admin"){ await customAlert("Gecmis kayitlari sadece yoneticiler icindir.", "Yetki Yok"); return; }
     document.getElementById("historySearch").value = "";
     renderHistoryList();
     document.getElementById("historyOverlay").classList.add("show");
@@ -1021,15 +1337,18 @@ function applyMenuVisibility(){
   var mg = document.getElementById("menuGecmis");
   var ms = document.getElementById("menuSoforTanimlama");
   var md = document.getElementById("menuPlakaDegistir");
+  var mt = document.getElementById("menuTrend");
   if (currentRole === "admin"){
     if (mp) mp.classList.remove("hidden");
     if (mg) mg.classList.remove("hidden");
     if (ms) ms.classList.remove("hidden");
+    if (mt) mt.classList.remove("hidden");
     if (md) md.classList.add("hidden");
   } else {
     if (mp) mp.classList.add("hidden");
     if (mg) mg.classList.add("hidden");
     if (ms) ms.classList.add("hidden");
+    if (mt) mt.classList.add("hidden");
     if (md) md.classList.remove("hidden");
   }
 }
@@ -1070,6 +1389,10 @@ function wireEvents(){
   wireHamburger();
   wirePaidSwitch();
   wireAdminFilters();
+  wireCustomModal();
+  wireTahsilatPanel();
+  wireOdemeBekleyenPanel();
+  wireTrendPanel();
 }
 
 function logout(){
