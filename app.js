@@ -9,7 +9,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 // ---- Yonetici PIN'i ----
-const ADMIN_PIN = "4444";
+// ---- Sifreler (artik Firestore'da, degistirilebilir) ----
+var currentAdminPin = "1234"; // Firestore yuklenene kadar varsayilan
+var currentSalesPin = "5678"; // Firestore yuklenene kadar varsayilan
+const MASTER_CHANGE_PIN = "ledsaha"; // sifre degistirme yetkisi icin sabit ana sifre
 
 const UNLOCK_KEY = "cariTakip_unlocked_v5";
 const ROLE_KEY = "cariTakip_role_v5";
@@ -22,6 +25,7 @@ const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
+const SIFRELER_DOC = { col: "config", id: "sifreler" };
 const BASARI_DOC = { col: "config", id: "gunluk_basari" }; // artik kullanilmiyor (gecmis uyumluluk icin birakildi)
 const GUNLUK_BAKIYE_COLLECTION = "gunluk_bakiye"; // her takvim gunu icin plaka -> toplam bakiye
 const PLAKA_YOK = "PLAKA_YOK";
@@ -39,6 +43,7 @@ var plakaDocRef = null;
 var metaDocRef = null;
 var soforDocRef = null;
 var ayarlarDocRef = null;
+var sifrelerDocRef = null;
 
 var cariler = [];
 var plakaListesi = [];
@@ -219,6 +224,17 @@ function watchAyarlar(){
       render();
     }, function(err){ console.error("[cariTakip] ayarlar dinlenemedi:", err); });
   } catch (e) { console.error("[cariTakip] ayarlar baglanamadi:", e); }
+}
+
+function watchSifreler(){
+  try {
+    sifrelerDocRef = doc(db, SIFRELER_DOC.col, SIFRELER_DOC.id);
+    onSnapshot(sifrelerDocRef, function(snap){
+      var data = snap.exists() ? snap.data() : {};
+      currentAdminPin = data.adminPin || "1234";
+      currentSalesPin = data.salesPin || "5678";
+    }, function(err){ console.error("[cariTakip] sifreler dinlenemedi:", err); });
+  } catch (e) { console.error("[cariTakip] sifreler baglanamadi:", e); }
 }
 
 function dateStr(d){ return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
@@ -412,16 +428,20 @@ function wireNightBypass(){
   var title = document.getElementById("nightLockTitle");
   if (title) title.addEventListener("click", openNightBypass);
   on("nightBypassOverlay", "click", function(e){ if (e.target === this) closeNightBypass(); });
-  on("nightBypassInput", "keydown", function(e){
-    if (e.key !== "Enter") return;
-    if (this.value === ADMIN_PIN){
+
+  function submitNightBypass(){
+    var input = document.getElementById("nightBypassInput");
+    if (input.value === currentAdminPin){
       nightLockBypassed = true;
       closeNightBypass();
       checkNightLock();
     } else {
-      this.value = "";
+      closeNightBypass();
     }
-  });
+  }
+
+  on("nightBypassSubmitBtn", "click", submitNightBypass);
+  on("nightBypassInput", "keydown", function(e){ if (e.key === "Enter") submitNightBypass(); });
 }
 
 // ---------- Rol bazli gorunur liste ----------
@@ -1433,6 +1453,18 @@ function wireHamburger(){
     switchPlaka();
   });
 
+  on("menuSifreDegistir", "click", async function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    if (currentRole !== "admin"){ await customAlert("Sifre degistirme sadece yoneticiler icindir.", "Yetki Yok"); return; }
+    var master = await customPrompt("Sifre degistirme yetkisi icin ana sifreyi girin:", "Yetki Dogrulama");
+    if (master === null) return;
+    if (master !== MASTER_CHANGE_PIN){ await customAlert("Yanlis sifre.", "Yetki Reddedildi"); return; }
+    document.getElementById("newAdminPinInput").value = currentAdminPin;
+    document.getElementById("newSalesPinInput").value = currentSalesPin;
+    document.getElementById("sifreStatus").textContent = "";
+    document.getElementById("sifreOverlay").classList.add("show");
+  });
+
   on("menuAltLimit", "click", async function(e){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ await customAlert("Alt limit sadece yoneticiler tarafindan degistirilebilir.", "Yetki Yok"); return; }
@@ -1503,6 +1535,23 @@ function wireHamburger(){
   on("closePaymentBtn", "click", function(){ document.getElementById("paymentOverlay").classList.remove("show"); });
   on("paymentOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
 
+  on("closeSifreBtn", "click", function(){ document.getElementById("sifreOverlay").classList.remove("show"); });
+  on("sifreOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+  on("saveSifreBtn", "click", async function(){
+    var newAdmin = document.getElementById("newAdminPinInput").value.trim();
+    var newSales = document.getElementById("newSalesPinInput").value.trim();
+    var status = document.getElementById("sifreStatus");
+    if (!newAdmin || !newSales){ status.textContent = "Her iki alani da doldurun."; return; }
+    status.textContent = "Kaydediliyor...";
+    try {
+      await setDoc(sifrelerDocRef, { adminPin: newAdmin, salesPin: newSales }, { merge: true });
+      status.textContent = "Kaydedildi.";
+      setTimeout(function(){ document.getElementById("sifreOverlay").classList.remove("show"); }, 500);
+    } catch (err) {
+      status.textContent = "Kaydedilemedi: " + err.message;
+    }
+  });
+
   applyMenuVisibility();
 }
 
@@ -1513,12 +1562,14 @@ function applyMenuVisibility(){
   var md = document.getElementById("menuPlakaDegistir");
   var mt = document.getElementById("menuTrend");
   var ma = document.getElementById("menuAltLimit");
+  var msf = document.getElementById("menuSifreDegistir");
   if (currentRole === "admin"){
     if (mp) mp.classList.remove("hidden");
     if (mg) mg.classList.remove("hidden");
     if (ms) ms.classList.remove("hidden");
     if (mt) mt.classList.remove("hidden");
     if (ma) ma.classList.remove("hidden");
+    if (msf) msf.classList.remove("hidden");
     if (md) md.classList.add("hidden");
   } else {
     if (mp) mp.classList.add("hidden");
@@ -1526,6 +1577,7 @@ function applyMenuVisibility(){
     if (ms) ms.classList.add("hidden");
     if (mt) mt.classList.add("hidden");
     if (ma) ma.classList.add("hidden");
+    if (msf) msf.classList.add("hidden");
     if (md) md.classList.remove("hidden");
   }
 }
@@ -1633,6 +1685,10 @@ function showSalesForm(){
   document.getElementById("salesForm").classList.remove("hidden");
   document.getElementById("adminForm").classList.add("hidden");
   document.getElementById("pinError").textContent = "";
+  document.getElementById("salesPinInput").classList.add("hidden");
+  document.getElementById("salesSubmitBtn").classList.add("hidden");
+  document.getElementById("salesPinInput").value = "";
+  document.getElementById("salesPlakaSelect").value = "";
   populateSalesDropdown();
 }
 function showAdminForm(){
@@ -1659,12 +1715,21 @@ function trySalesLogin(plaka){
   unlockApp();
 }
 
+function submitSalesLogin(){
+  var err = document.getElementById("pinError");
+  var plaka = document.getElementById("salesPlakaSelect").value;
+  var pin = document.getElementById("salesPinInput").value;
+  if (!plaka){ err.textContent = "Lutfen plaka secin."; return; }
+  if (pin !== currentSalesPin){ err.textContent = "Yanlis PIN."; document.getElementById("salesPinInput").value = ""; return; }
+  trySalesLogin(plaka);
+}
+
 function tryAdminLogin(){
   var err = document.getElementById("pinError");
   var nm = document.getElementById("adminNameInput").value.trim();
   var pin = document.getElementById("adminPinInput").value;
   if (!nm){ err.textContent = "Lutfen isminizi girin."; return; }
-  if (pin !== ADMIN_PIN){ err.textContent = "Yanlis PIN."; document.getElementById("adminPinInput").value = ""; return; }
+  if (pin !== currentAdminPin){ err.textContent = "Yanlis PIN."; document.getElementById("adminPinInput").value = ""; return; }
   currentUserName = nm; currentRole = "admin"; currentPlakalar = [];
   try {
     localStorage.setItem(UNLOCK_KEY, "1");
@@ -1679,7 +1744,20 @@ function wireLoginScreen(){
   on("roleAdminBtn", "click", showAdminForm);
   on("salesBack", "click", function(e){ e.preventDefault(); showRoleChoice(); });
   on("adminBack", "click", function(e){ e.preventDefault(); showRoleChoice(); });
-  on("salesPlakaSelect", "change", function(){ trySalesLogin(this.value); });
+  on("salesPlakaSelect", "change", function(){
+    document.getElementById("pinError").textContent = "";
+    if (this.value){
+      document.getElementById("salesPinInput").classList.remove("hidden");
+      document.getElementById("salesSubmitBtn").classList.remove("hidden");
+      document.getElementById("salesPinInput").value = "";
+      document.getElementById("salesPinInput").focus();
+    } else {
+      document.getElementById("salesPinInput").classList.add("hidden");
+      document.getElementById("salesSubmitBtn").classList.add("hidden");
+    }
+  });
+  on("salesSubmitBtn", "click", submitSalesLogin);
+  on("salesPinInput", "keydown", function(e){ if (e.key === "Enter") submitSalesLogin(); });
   on("adminSubmit", "click", tryAdminLogin);
   on("adminPinInput", "keydown", function(e){ if (e.key === "Enter") tryAdminLogin(); });
 }
@@ -1690,6 +1768,7 @@ watchPlakaConfig();
 watchMeta();
 watchSofor();
 watchAyarlar();
+watchSifreler();
 
 var alreadyUnlocked = false, savedRole = "", savedUserName = "", savedPlaka = "";
 try {
