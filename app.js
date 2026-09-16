@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 // ---- Yonetici PIN'i ----
-const ADMIN_PIN = "1234";
+const ADMIN_PIN = "4444";
 
 const UNLOCK_KEY = "cariTakip_unlocked_v5";
 const ROLE_KEY = "cariTakip_role_v5";
@@ -51,6 +51,7 @@ var currentUserName = "";
 var currentRole = "";
 var currentPlakalar = [];
 var nightLockActive = false;
+var nightLockBypassed = false;
 var appWired = false;
 
 var unsubCariler = null;
@@ -388,6 +389,7 @@ function computeLastCutoff(now){
 }
 function checkNightLock(){
   if (currentRole !== "sales") { nightLockActive = false; hideNightLock(); return; }
+  if (nightLockBypassed) { nightLockActive = false; hideNightLock(); return; }
   var now = new Date();
   var cutoff = computeLastCutoff(now);
   var locked = !lastUploadAt || lastUploadAt < cutoff;
@@ -396,6 +398,31 @@ function checkNightLock(){
 }
 function showNightLock(){ var el = document.getElementById("nightLock"); if (el) el.classList.add("show"); }
 function hideNightLock(){ var el = document.getElementById("nightLock"); if (el) el.classList.remove("show"); }
+
+function openNightBypass(){
+  var input = document.getElementById("nightBypassInput");
+  input.value = "";
+  document.getElementById("nightBypassOverlay").classList.add("show");
+  setTimeout(function(){ input.focus(); }, 50);
+}
+function closeNightBypass(){
+  document.getElementById("nightBypassOverlay").classList.remove("show");
+}
+function wireNightBypass(){
+  var title = document.getElementById("nightLockTitle");
+  if (title) title.addEventListener("click", openNightBypass);
+  on("nightBypassOverlay", "click", function(e){ if (e.target === this) closeNightBypass(); });
+  on("nightBypassInput", "keydown", function(e){
+    if (e.key !== "Enter") return;
+    if (this.value === ADMIN_PIN){
+      nightLockBypassed = true;
+      closeNightBypass();
+      checkNightLock();
+    } else {
+      this.value = "";
+    }
+  });
+}
 
 // ---------- Rol bazli gorunur liste ----------
 
@@ -468,7 +495,7 @@ function render(){
         html += '    <div class="rejectline">⚠️ Reddedildi: ' + escapeHtml(c.rejectionReason) + '</div>';
       }
       if (c.lastEditedBy){
-        html += '    <div class="editor">Son duzenleyen: ' + escapeHtml(c.lastEditedBy) + (c.lastEditedAtLabel ? " - " + escapeHtml(c.lastEditedAtLabel) : "") + '</div>';
+        html += '    <div class="editor" data-editor-id="' + escapeAttr(c.id) + '">Son duzenleyen: ' + escapeHtml(c.lastEditedBy) + (c.lastEditedAtLabel ? " - " + escapeHtml(c.lastEditedAtLabel) : "") + (c.lastAction ? " — " + escapeHtml(c.lastAction) : "") + '</div>';
       }
       html += '  </div>';
       html += '  <div class="right">';
@@ -480,6 +507,12 @@ function render(){
     list.innerHTML = html;
     list.querySelectorAll(".row").forEach(function(row){
       row.addEventListener("click", function(){ openDetail(row.getAttribute("data-id")); });
+    });
+    list.querySelectorAll(".editor[data-editor-id]").forEach(function(el){
+      el.addEventListener("click", function(e){
+        e.stopPropagation();
+        showChangeDetail(el.getAttribute("data-editor-id"));
+      });
     });
   }
 
@@ -581,6 +614,7 @@ function openDetail(id){
   var editorText = c.lastEditedBy
     ? "Son duzenleyen: " + c.lastEditedBy + (c.lastEditedAtLabel ? " - " + c.lastEditedAtLabel : "")
     : "Henuz kimse duzenlemedi.";
+  if (c.lastAction) editorText += " — " + c.lastAction;
   if (c.rejectionReason) editorText += " | ⚠️ Reddedildi: " + c.rejectionReason;
   if (!c.flagged && isAutoFlagged(c)){
     var ds = daysSinceCollection(c);
@@ -626,6 +660,50 @@ function editorLabel(){
   return plaka + (isim ? " - " + isim : "") + " (plasiyer)";
 }
 
+function computeChangeLines(before, after){
+  var lines = [];
+  var beforeNote = (before && before.note) || "";
+  var afterNote = after.note || "";
+  if (beforeNote !== afterNote){
+    if (!beforeNote && afterNote) lines.push('Not eklendi: "' + afterNote + '"');
+    else if (beforeNote && !afterNote) lines.push('Not silindi (onceki: "' + beforeNote + '")');
+    else lines.push('Not degistirildi: "' + beforeNote + '" -> "' + afterNote + '"');
+  }
+  var beforeDue = (before && before.due) || "";
+  var afterDue = after.due || "";
+  if (beforeDue !== afterDue){
+    if (!beforeDue && afterDue) lines.push("Odeme tarihi eklendi: " + fmtDateISOtoTR(afterDue));
+    else if (beforeDue && !afterDue) lines.push("Odeme tarihi silindi (onceki: " + fmtDateISOtoTR(beforeDue) + ")");
+    else lines.push("Odeme tarihi degistirildi: " + fmtDateISOtoTR(beforeDue) + " -> " + fmtDateISOtoTR(afterDue));
+  }
+  var beforeFlag = !!(before && before.flagged);
+  var afterFlag = !!after.flagged;
+  if (beforeFlag !== afterFlag) lines.push(afterFlag ? "Sorunlu isareti acildi" : "Sorunlu isareti kapatildi");
+
+  var beforeDebt = (before && before.debt) || 0;
+  var afterDebt = after.debt || 0;
+  if (Math.abs(beforeDebt - afterDebt) > 0.001) lines.push("Bakiye guncellendi: " + fmtMoney(beforeDebt) + " -> " + fmtMoney(afterDebt));
+
+  var beforePaid = !!(before && before.paymentReported);
+  var afterPaid = !!after.paymentReported;
+  if (!beforePaid && afterPaid) lines.push("Odeme bildirildi: " + fmtMoney(after.paymentAmount || 0));
+  else if (beforePaid && !afterPaid) lines.push("Odeme bildirimi kaldirildi");
+
+  return lines;
+}
+
+function showChangeDetail(id){
+  var c = cariler.find(function(x){ return x.id === id; });
+  if (!c) return;
+  var lines = [];
+  lines.push("Kim: " + (c.lastEditedBy || "-"));
+  lines.push("Ne zaman: " + (c.lastEditedAtLabel || "-"));
+  lines.push("Islem: " + (c.lastAction || "-"));
+  if (c.lastChangeDetail){ lines.push(""); lines.push(c.lastChangeDetail); }
+  if (c.rejectionReason){ lines.push(""); lines.push("Red sebebi: " + c.rejectionReason); }
+  customAlert(lines.join("\n"), c.name + " - Son Degisiklik");
+}
+
 async function writeHistory(c, data){
   try {
     var histRef = doc(collection(db, HISTORY_COLLECTION));
@@ -642,12 +720,18 @@ async function clearCurrentDetail(){
   if (!currentDocId) return;
   var ok = await customConfirm("Bu carinin notu, tarihi, sorunlu isareti ve odeme bildirimi tamamen temizlensin mi? Isim/kategori/plaka/bakiye bilgisi degismez.", "Temizle");
   if (!ok) return;
+  var c = cariler.find(function(x){ return x.id === currentDocId; });
   var status = document.getElementById("saveStatus");
   status.textContent = "Temizleniyor...";
+  var detail = "Yonetici tarafindan tum kayit temizlendi.";
+  if (c && c.note) detail += '\nSilinen not: "' + c.note + '"';
+  if (c && c.due) detail += "\nSilinen tarih: " + fmtDateISOtoTR(c.due);
   try {
     await setDoc(doc(db, CARI_COLLECTION, currentDocId), {
       note: "", due: "", flagged: false,
       paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "", rejectionReason: "",
+      lastAction: "Kayit temizlendi (yonetici)",
+      lastChangeDetail: detail,
       lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
     }, { merge: true });
     status.textContent = "Temizlendi.";
@@ -668,13 +752,30 @@ async function saveCurrentNote(){
   var paidAmount = parseFloat(document.getElementById("paidAmountInput").value);
   if (isNaN(paidAmount)) paidAmount = 0;
 
-  var data = {
+  var newValues = {
     debt: debtVal,
     note: document.getElementById("noteInput").value,
     due: document.getElementById("dueInput").value,
     flagged: document.getElementById("flagSwitch").classList.contains("on"),
     paymentReported: paid,
-    paymentAmount: paid ? paidAmount : 0,
+    paymentAmount: paid ? paidAmount : 0
+  };
+
+  var changeLines = computeChangeLines(c, newValues);
+  if (changeLines.length === 0){
+    status.textContent = "Degisiklik yok, kaydedilmedi.";
+    setTimeout(closeDetail, 500);
+    return;
+  }
+
+  var data = {
+    debt: newValues.debt,
+    note: newValues.note,
+    due: newValues.due,
+    flagged: newValues.flagged,
+    paymentReported: newValues.paymentReported,
+    paymentAmount: newValues.paymentAmount,
+    lastChangeDetail: changeLines.join("\n"),
     lastEditedBy: editorLabel(),
     updatedAt: serverTimestamp(),
     lastEditedAt: serverTimestamp()
@@ -684,9 +785,13 @@ async function saveCurrentNote(){
     data.paymentReportedAt = serverTimestamp();
     data.paymentReviewed = false;
     data.rejectionReason = ""; // yeni bildirim eski red notunu temizler
-  } else if (!paid){
+    data.lastAction = "Odeme bildirildi: " + fmtMoney(paidAmount);
+  } else if (!paid && c && c.paymentReported){
     data.paymentReviewed = false;
     data.paymentReportedBy = "";
+    data.lastAction = "Odeme bildirimi kaldirildi";
+  } else {
+    data.lastAction = "Bilgi guncellendi";
   }
 
   status.textContent = "Kaydediliyor...";
@@ -717,6 +822,9 @@ function renderPaymentList(){
     html += '  <div class="rname">' + escapeHtml(c.name) + '</div>';
     html += '  <div class="rmeta">Bildiren: ' + escapeHtml(c.paymentReportedBy || "-") + ' | Guncel bakiye: ' + fmtMoney(c.debt) + '</div>';
     html += '  <div class="ramount">Bildirilen odeme: ' + fmtMoney(c.paymentAmount) + '</div>';
+    if (c.note){
+      html += '  <div class="rmeta" style="color:var(--danger);margin-top:4px;">Plasiyer notu: "' + escapeHtml(c.note) + '"</div>';
+    }
     html += '  <div class="ractions">';
     if (currentRole === "admin"){
       html += '<button type="button" class="approve" data-act="approve">Onayla</button>';
@@ -738,14 +846,20 @@ function renderPaymentList(){
 
 async function handlePaymentAction(id, action){
   var status = document.getElementById("paymentStatus");
+  var c = cariler.find(function(x){ return x.id === id; });
   try {
     if (action === "approve"){
       status.textContent = "Isleniyor...";
       // Odeme onaylaninca not/tarih/sorunlu bilgisi de temizlenir -- eski borc notu
       // yeni bir odeme bekleniyormus gibi yanlis izlenim vermesin diye.
+      var approveDetail = "Odeme onaylandi (bildirilen tutar: " + fmtMoney(c ? c.paymentAmount : 0) + ").";
+      if (c && c.note) approveDetail += '\nTemizlenen not: "' + c.note + '"';
+      if (c && c.due) approveDetail += "\nTemizlenen tarih: " + fmtDateISOtoTR(c.due);
       await setDoc(doc(db, CARI_COLLECTION, id), {
         note: "", due: "", flagged: false,
         paymentReported: false, paymentAmount: 0, paymentReviewed: true, paymentReportedBy: "", rejectionReason: "",
+        lastAction: "Odeme onaylandi, not temizlendi",
+        lastChangeDetail: approveDetail,
         lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
       }, { merge: true });
       status.textContent = "Onaylandi, not temizlendi.";
@@ -754,16 +868,22 @@ async function handlePaymentAction(id, action){
       if (reason === null) return;
       if (!reason.trim()){ await customAlert("Sebep girmeden reddedemezsiniz.", "Uyari"); return; }
       status.textContent = "Isleniyor...";
+      var rejectDetail = "Odeme reddedildi (bildirilen tutar: " + fmtMoney(c ? c.paymentAmount : 0) + ").\nSebep: " + reason.trim();
       await setDoc(doc(db, CARI_COLLECTION, id), {
         paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "",
         rejectionReason: reason.trim(), rejectedBy: editorLabel(), rejectedAt: serverTimestamp(),
+        lastAction: "Odeme reddedildi",
+        lastChangeDetail: rejectDetail,
         lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
       }, { merge: true });
       status.textContent = "Reddedildi.";
     } else if (action === "cancel"){
       status.textContent = "Isleniyor...";
+      var cancelDetail = "Plasiyer kendi bildirdigi odeme bildirimini iptal etti (bildirilen tutar: " + fmtMoney(c ? c.paymentAmount : 0) + ").";
       await setDoc(doc(db, CARI_COLLECTION, id), {
         paymentReported: false, paymentAmount: 0, paymentReviewed: false, paymentReportedBy: "",
+        lastAction: "Odeme bildirimi iptal edildi",
+        lastChangeDetail: cancelDetail,
         lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
       }, { merge: true });
       status.textContent = "Iptal edildi.";
@@ -1261,6 +1381,8 @@ function initRealtime(){
           paymentReported: !!d.paymentReported, paymentAmount: d.paymentAmount || 0,
           paymentReviewed: !!d.paymentReviewed, paymentReportedBy: d.paymentReportedBy || "",
           rejectionReason: d.rejectionReason || "",
+          lastAction: d.lastAction || "",
+          lastChangeDetail: d.lastChangeDetail || "",
           lastEditedBy: d.lastEditedBy || "", lastEditedAtLabel: fmtTimestamp(d.lastEditedAt)
         });
       });
@@ -1435,6 +1557,7 @@ function wireEvents(){
   on("overlay", "click", function(e){ if (e.target === this) closeDetail(); });
   on("saveBtn", "click", saveCurrentNote);
   on("clearDetailBtn", "click", clearCurrentDetail);
+  on("detailEditor", "click", function(){ if (currentDocId) showChangeDetail(currentDocId); });
   on("searchBox", "input", render);
   on("chipFlag", "click", function(){ activeQuickFilter = activeQuickFilter === "flagged" ? null : "flagged"; render(); });
   on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
@@ -1579,6 +1702,7 @@ try {
 console.log("[cariTakip] app.js yuklendi. alreadyUnlocked =", alreadyUnlocked, "rol =", savedRole);
 
 wireLoginScreen();
+wireNightBypass();
 
 if (alreadyUnlocked && savedRole === "admin" && savedUserName){
   currentUserName = savedUserName; currentRole = "admin"; unlockApp();
