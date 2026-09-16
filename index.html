@@ -85,7 +85,7 @@
   .row .tag{ display:inline-block; font-size:9px; color:var(--muted); background:var(--card2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; margin-right:4px; }
   .row .note-preview{ font-size:10.5px; color:var(--danger); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .due{ font-size:10px; color:var(--warn); margin-top:2px; }
-  .row .editor{ font-size:9.5px; color:var(--accent); margin-top:2px; }
+  .row .editor{ font-size:9.5px; color:var(--accent); margin-top:2px; cursor:pointer; text-decoration:underline dotted; }
   .row .paidline{ font-size:10.5px; color:var(--ok); margin-top:2px; font-weight:600; }
   .row .right{ text-align:right; flex-shrink:0; }
   .row .debt{ font-size:13px; font-weight:700; }
@@ -100,6 +100,7 @@
   .sheet-head{ padding:14px 14px 6px 14px; flex-shrink:0; }
   .sheet-head h2{ font-size:13.5px; margin:0 0 2px 0; }
   .sheet-head .sub{ font-size:10.5px; color:var(--muted); }
+  #detailEditor{ cursor:pointer; text-decoration:underline dotted; color:var(--accent); }
   .sheet-body{ padding:8px 14px; overflow-y:auto; flex:1; min-height:0; }
   .sheet-footer{ padding:10px 14px 16px 14px; flex-shrink:0; border-top:1px solid var(--border); }
   .field{ margin-bottom:9px; }
@@ -269,8 +270,14 @@
 <div id="nightLock">
   <div class="box">
     <div class="icon">🌙</div>
-    <h3>Gece Kilidi Aktif</h3>
-    <p>Gece 01:00'den sonra veriler kilitlenir.<br/>Lutfen muhasebeden (yoneticilerden) guncel Excel yuklemesini isteyin. Yukleme yapilinca bu ekran otomatik acilacaktir.</p>
+    <h3 id="nightLockTitle">Gece Kilidi Aktif</h3>
+    <p>Gece 01:00'den sonra veriler kilitlenir.<br/>Lutfen muhasebeden guncel veri yuklemesini isteyin. Yukleme yapilinca bu ekran otomatik acilacaktir.</p>
+  </div>
+</div>
+
+<div class="overlay" id="nightBypassOverlay" style="align-items:center; z-index:70;">
+  <div style="background:var(--card); border-radius:12px; padding:16px; width:180px;">
+    <input type="password" inputmode="numeric" id="nightBypassInput" style="width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px; font-size:16px; text-align:center; letter-spacing:3px;" />
   </div>
 </div>
 
