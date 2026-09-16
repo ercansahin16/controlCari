@@ -21,6 +21,7 @@ const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
 const SOFOR_DOC = { col: "config", id: "soforler" };
+const AYARLAR_DOC = { col: "config", id: "ayarlar" };
 const BASARI_DOC = { col: "config", id: "gunluk_basari" }; // artik kullanilmiyor (gecmis uyumluluk icin birakildi)
 const GUNLUK_BAKIYE_COLLECTION = "gunluk_bakiye"; // her takvim gunu icin plaka -> toplam bakiye
 const PLAKA_YOK = "PLAKA_YOK";
@@ -37,10 +38,12 @@ const REQUIRED_COLUMNS = [
 var plakaDocRef = null;
 var metaDocRef = null;
 var soforDocRef = null;
+var ayarlarDocRef = null;
 
 var cariler = [];
 var plakaListesi = [];
 var soforMap = {}; // plaka -> isim
+var minBakiye = 250; // bu tutarin altindaki bakiyeler tum listelerden gizlenir
 var lastUploadAt = null;
 
 var currentDocId = null;
@@ -198,6 +201,23 @@ function watchSofor(){
       render();
     }, function(err){ console.error("[cariTakip] sofor dinlenemedi:", err); });
   } catch (e) { console.error("[cariTakip] sofor baglanamadi:", e); }
+}
+
+function updateMinBakiyeLabel(){
+  var el = document.getElementById("minBakiyeLabel");
+  if (el) el.textContent = "Alt limit: " + fmtMoney(minBakiye) + " (bu tutarin altindaki bakiyeler gizleniyor)";
+}
+
+function watchAyarlar(){
+  try {
+    ayarlarDocRef = doc(db, AYARLAR_DOC.col, AYARLAR_DOC.id);
+    onSnapshot(ayarlarDocRef, function(snap){
+      var data = snap.exists() ? snap.data() : {};
+      minBakiye = (typeof data.minBakiye === "number") ? data.minBakiye : 250;
+      updateMinBakiyeLabel();
+      render();
+    }, function(err){ console.error("[cariTakip] ayarlar dinlenemedi:", err); });
+  } catch (e) { console.error("[cariTakip] ayarlar baglanamadi:", e); }
 }
 
 function dateStr(d){ return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
@@ -381,6 +401,7 @@ function hideNightLock(){ var el = document.getElementById("nightLock"); if (el)
 
 function getVisibleCariler(){
   var active = cariler.filter(function(c){ return c.aktif; });
+  active = active.filter(function(c){ return (c.debt || 0) >= minBakiye; });
   var base = active;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
@@ -876,9 +897,21 @@ function setAgingTabActive(id){
   });
 }
 
+function activeFilterNotice(){
+  if (currentRole !== "admin") return "";
+  var k1 = document.getElementById("filterKategori1") ? document.getElementById("filterKategori1").value : "";
+  var pk = document.getElementById("filterPlaka") ? document.getElementById("filterPlaka").value : "";
+  if (!k1 && !pk) return "";
+  var parts = [];
+  if (k1) parts.push("Bolge=" + k1);
+  if (pk) parts.push("Plaka=" + (pk === PLAKA_YOK ? "Plaka Yok" : pk));
+  return "⚠️ Ana ekrandaki filtre uygulaniyor: " + parts.join(", ") + ". Tum carileri gormek icin ana ekrandaki filtreyi temizleyin.";
+}
+
 function openTahsilatPanel(){
   document.getElementById("gunSayisiRow").classList.remove("show");
   document.getElementById("tahsilatResults").innerHTML = '<div class="empty" style="padding:20px;">Yukaridan bir kriter secin.</div>';
+  document.getElementById("tahsilatFilterNotice").textContent = activeFilterNotice();
   setAgingTabActive(null);
   activeAgingMode = null;
   document.getElementById("tahsilatOverlay").classList.add("show");
@@ -941,6 +974,7 @@ function setOdemeTabActive(id){
 function openOdemeBekleyenPanel(){
   activeOdemeSort = "date";
   setOdemeTabActive("tabSortDate");
+  document.getElementById("odemeFilterNotice").textContent = activeFilterNotice();
   renderOdemeBekleyen();
   document.getElementById("odemeBekleyenOverlay").classList.add("show");
 }
@@ -1277,6 +1311,24 @@ function wireHamburger(){
     switchPlaka();
   });
 
+  on("menuAltLimit", "click", async function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    if (currentRole !== "admin"){ await customAlert("Alt limit sadece yoneticiler tarafindan degistirilebilir.", "Yetki Yok"); return; }
+    var val = await customPrompt(
+      "Bu tutarin altindaki bakiyeler tum listelerden (plasiyer ve yonetici) gizlenir.\nMevcut deger: " + fmtMoney(minBakiye),
+      "Alt Limit Belirle", String(minBakiye)
+    );
+    if (val === null) return;
+    var num = parseFloat(val.toString().replace(",", "."));
+    if (isNaN(num) || num < 0){ await customAlert("Gecerli bir sayi girin.", "Uyari"); return; }
+    try {
+      await setDoc(ayarlarDocRef, { minBakiye: num }, { merge: true });
+      await customAlert("Alt limit guncellendi: " + fmtMoney(num), "Basarili");
+    } catch (err) {
+      await customAlert("Guncellenemedi: " + err.message, "Hata");
+    }
+  });
+
   on("menuSoforTanimlama", "click", async function(e){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ await customAlert("Sofor tanimlama sadece yoneticiler icindir.", "Yetki Yok"); return; }
@@ -1338,17 +1390,20 @@ function applyMenuVisibility(){
   var ms = document.getElementById("menuSoforTanimlama");
   var md = document.getElementById("menuPlakaDegistir");
   var mt = document.getElementById("menuTrend");
+  var ma = document.getElementById("menuAltLimit");
   if (currentRole === "admin"){
     if (mp) mp.classList.remove("hidden");
     if (mg) mg.classList.remove("hidden");
     if (ms) ms.classList.remove("hidden");
     if (mt) mt.classList.remove("hidden");
+    if (ma) ma.classList.remove("hidden");
     if (md) md.classList.add("hidden");
   } else {
     if (mp) mp.classList.add("hidden");
     if (mg) mg.classList.add("hidden");
     if (ms) ms.classList.add("hidden");
     if (mt) mt.classList.add("hidden");
+    if (ma) ma.classList.add("hidden");
     if (md) md.classList.remove("hidden");
   }
 }
@@ -1433,6 +1488,7 @@ function unlockApp(){
   document.getElementById("lockScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("locked");
   applyRoleUI();
+  updateMinBakiyeLabel();
   if (!appWired){ wireEvents(); appWired = true; }
   initRealtime();
   if (currentRole === "admin") watchHistory();
@@ -1510,6 +1566,7 @@ function wireLoginScreen(){
 watchPlakaConfig();
 watchMeta();
 watchSofor();
+watchAyarlar();
 
 var alreadyUnlocked = false, savedRole = "", savedUserName = "", savedPlaka = "";
 try {
