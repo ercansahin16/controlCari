@@ -108,6 +108,7 @@
   .field textarea, .field input[type=date]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:12px; font-family:inherit; }
   .field textarea{ min-height:52px; resize:vertical; }
   .field input[type=number]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:13px; font-family:inherit; }
+  .field input[type=text]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:13px; font-family:inherit; }
 
   .date-field-wrap{ position:relative; }
   .date-field{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:12px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; }
@@ -254,6 +255,8 @@
     <div id="salesForm" class="role-form hidden">
       <p>Plasiyer Girisi</p>
       <select id="salesPlakaSelect"><option value="">Plaka secin...</option></select>
+      <input type="password" inputmode="numeric" id="salesPinInput" placeholder="PIN" maxlength="12" class="hidden" />
+      <button type="button" id="salesSubmitBtn" class="hidden">Giris</button>
       <a href="#" class="back-link" id="salesBack">‹ Geri</a>
     </div>
     <div id="adminForm" class="role-form hidden">
@@ -275,9 +278,10 @@
   </div>
 </div>
 
-<div class="overlay" id="nightBypassOverlay" style="align-items:center; z-index:70;">
-  <div style="background:var(--card); border-radius:12px; padding:16px; width:180px;">
-    <input type="password" inputmode="numeric" id="nightBypassInput" style="width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px; font-size:16px; text-align:center; letter-spacing:3px;" />
+<div class="overlay" id="nightBypassOverlay" style="align-items:center; justify-content:center; z-index:70;">
+  <div style="background:var(--card); border-radius:12px; padding:14px; display:flex; gap:8px; align-items:center;">
+    <input type="password" inputmode="numeric" id="nightBypassInput" style="width:140px; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:10px; font-size:16px; text-align:center; letter-spacing:3px;" />
+    <button type="button" id="nightBypassSubmitBtn" style="background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 14px; font-size:15px; cursor:pointer;">✓</button>
   </div>
 </div>
 
@@ -292,6 +296,7 @@
       <a href="#" id="menuOdemeBekleyen">⏰ Odeme Bekleyenler</a>
       <a href="#" id="menuTrend">📈 Tahsilat Trendi</a>
       <a href="#" id="menuAltLimit">💵 Alt Limit Belirle</a>
+      <a href="#" id="menuSifreDegistir">🔑 Sifre Degistir</a>
       <a href="#" id="menuPlakaDegistir">🔄 Plaka Degistir</a>
       <a href="#" id="menuSoforTanimlama">🧑‍✈️ Sofor Tanimlama</a>
       <a href="#" id="menuBasari">🏆 Dunun Basarisi</a>
@@ -524,6 +529,29 @@
     </div>
     <div class="sheet-footer">
       <button class="btn close" id="closeTrendBtn" style="width:100%;">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sifreOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Sifre Degistir</h2><div class="sub">Yonetici ve plasiyer giris sifrelerini buradan degistirebilirsiniz.</div></div>
+    <div class="sheet-body">
+      <div class="field">
+        <label>Yonetici Sifresi</label>
+        <input type="text" inputmode="numeric" id="newAdminPinInput" />
+      </div>
+      <div class="field">
+        <label>Plasiyer Sifresi</label>
+        <input type="text" inputmode="numeric" id="newSalesPinInput" />
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <div class="btn-row">
+        <button class="btn close" id="closeSifreBtn">Kapat</button>
+        <button class="btn save" id="saveSifreBtn">Kaydet</button>
+      </div>
+      <div class="status" id="sifreStatus"></div>
     </div>
   </div>
 </div>
