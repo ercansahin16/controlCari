@@ -218,6 +218,8 @@
   .trend-bar.neg{ background:var(--danger); }
   .trend-label{ font-size:8px; color:var(--muted); margin-top:3px; }
   .trend-summary{ margin-top:14px; font-size:12px; text-align:center; background:var(--card2); border-radius:8px; padding:9px; }
+  .filter-notice{ font-size:10.5px; color:var(--warn); background:var(--card2); border:1px solid var(--warn); border-radius:8px; padding:7px 9px; margin-bottom:10px; }
+  .filter-notice:empty{ display:none; }
   .date-range-row{ display:flex; gap:6px; align-items:center; }
   .date-range-row input[type=date]{ flex:1; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:8px; font-size:11.5px; }
   .date-range-row button{ background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; cursor:pointer; }
@@ -282,6 +284,7 @@
       <a href="#" id="menuTahsilatDurumu">📊 Tahsilat Durumu</a>
       <a href="#" id="menuOdemeBekleyen">⏰ Odeme Bekleyenler</a>
       <a href="#" id="menuTrend">📈 Tahsilat Trendi</a>
+      <a href="#" id="menuAltLimit">💵 Alt Limit Belirle</a>
       <a href="#" id="menuPlakaDegistir">🔄 Plaka Degistir</a>
       <a href="#" id="menuSoforTanimlama">🧑‍✈️ Sofor Tanimlama</a>
       <a href="#" id="menuBasari">🏆 Dunun Basarisi</a>
@@ -291,6 +294,7 @@
     </div>
   </div>
   <div id="userInfo">-</div>
+  <div id="minBakiyeLabel" style="font-size:10px;color:var(--muted);margin-bottom:4px;"></div>
   <div id="connStatus">Baglaniyor...</div>
   <div class="upload-row" id="uploadRow">
     <label class="upload-btn" for="fileInput" id="uploadLabel">Excel Yukle (.xlsx)</label>
@@ -463,6 +467,7 @@
   <div class="sheet">
     <div class="sheet-head"><h2>Tahsilat Durumu</h2><div class="sub">Son tahsilat tarihine gore gecikmis cariler</div></div>
     <div class="sheet-body">
+      <div class="filter-notice" id="tahsilatFilterNotice"></div>
       <div class="tab-row">
         <button type="button" class="tab-btn" id="tabGunSayisi">Gun Sayisi Gir</button>
         <button type="button" class="tab-btn" id="tab1Ay">1 Aylik</button>
@@ -486,6 +491,7 @@
   <div class="sheet">
     <div class="sheet-head"><h2>Odeme Bekleyenler</h2><div class="sub">Odeme tarihi girilmis cariler</div></div>
     <div class="sheet-body">
+      <div class="filter-notice" id="odemeFilterNotice"></div>
       <div class="tab-row">
         <button type="button" class="tab-btn" id="tabSortDate">Tarihe Gore</button>
         <button type="button" class="tab-btn" id="tabSortDebt">Bakiyeye Gore</button>
