@@ -84,6 +84,7 @@
   .row .tags{ margin-top:2px; }
   .row .tag{ display:inline-block; font-size:9px; color:var(--muted); background:var(--card2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; margin-right:4px; }
   .row .note-preview{ font-size:10.5px; color:var(--danger); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .sabitnot-preview{ font-size:10.5px; color:var(--accent); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .due{ font-size:10px; color:var(--warn); margin-top:2px; }
   .row .editor{ font-size:9.5px; color:var(--accent); margin-top:2px; cursor:pointer; text-decoration:underline dotted; }
   .row .paidline{ font-size:10.5px; color:var(--ok); margin-top:2px; font-weight:600; }
@@ -261,8 +262,8 @@
     </div>
     <div id="adminForm" class="role-form hidden">
       <p>Yonetici Girisi</p>
-      <input type="text" id="adminNameInput" placeholder="Adiniz Soyadiniz" autocomplete="name" />
-      <input type="password" inputmode="numeric" id="adminPinInput" placeholder="PIN" maxlength="12" />
+      <select id="adminNameSelect"><option value="">Isim secin...</option></select>
+      <input type="password" id="adminPinInput" placeholder="Sifre" maxlength="16" />
       <button type="button" id="adminSubmit">Giris</button>
       <a href="#" class="back-link" id="adminBack">‹ Geri</a>
     </div>
@@ -296,7 +297,9 @@
       <a href="#" id="menuOdemeBekleyen">⏰ Odeme Bekleyenler</a>
       <a href="#" id="menuTrend">📈 Tahsilat Trendi</a>
       <a href="#" id="menuAltLimit">💵 Alt Limit Belirle</a>
-      <a href="#" id="menuSifreDegistir">🔑 Sifre Degistir</a>
+      <a href="#" id="menuSifremDegistir">🔑 Sifremi Degistir</a>
+      <a href="#" id="menuPlasiyerSifresi">🔑 Plasiyer Sifresini Degistir</a>
+      <a href="#" id="menuKullaniciTanimlama">👥 Kullanici Tanimlama</a>
       <a href="#" id="menuPlakaDegistir">🔄 Plaka Degistir</a>
       <a href="#" id="menuSoforTanimlama">🧑‍✈️ Sofor Tanimlama</a>
       <a href="#" id="menuBasari">🏆 Dunun Basarisi</a>
@@ -307,6 +310,7 @@
   </div>
   <div id="userInfo">-</div>
   <div id="minBakiyeLabel" style="font-size:10px;color:var(--muted);margin-bottom:4px;"></div>
+  <div id="veriTarihiLabel" style="font-size:10px;color:var(--muted);margin-bottom:4px;"></div>
   <div id="connStatus">Baglaniyor...</div>
   <div class="upload-row" id="uploadRow">
     <label class="upload-btn" for="fileInput" id="uploadLabel">Excel Yukle (.xlsx)</label>
@@ -357,7 +361,12 @@
       </div>
 
       <div class="field">
-        <label>Aciklama (not)</label>
+        <label>Sabit (Not)</label>
+        <textarea id="sabitNotInput" placeholder="Ornek: Her ayin 20'sinde odeme yapiyor."></textarea>
+      </div>
+
+      <div class="field">
+        <label>Gecici (Not)</label>
         <textarea id="noteInput" placeholder="Ornek: Ay basinda odeyecegini soyledi."></textarea>
       </div>
 
@@ -533,25 +542,20 @@
   </div>
 </div>
 
-<div class="overlay" id="sifreOverlay">
+<div class="overlay" id="userMgmtOverlay">
   <div class="sheet">
-    <div class="sheet-head"><h2>Sifre Degistir</h2><div class="sub">Yonetici ve plasiyer giris sifrelerini buradan degistirebilirsiniz.</div></div>
+    <div class="sheet-head"><h2>Kullanici Tanimlama</h2><div class="sub">Yeni yonetici hesaplari olusturun. Sifreler burada gorunur.</div></div>
     <div class="sheet-body">
-      <div class="field">
-        <label>Yonetici Sifresi</label>
-        <input type="text" inputmode="numeric" id="newAdminPinInput" />
-      </div>
-      <div class="field">
-        <label>Plasiyer Sifresi</label>
-        <input type="text" inputmode="numeric" id="newSalesPinInput" />
+      <div id="userMgmtList"></div>
+      <div class="plaka-add-row" style="flex-direction:column; gap:6px; align-items:stretch;">
+        <input type="text" id="newUserNameInput" placeholder="Isim" />
+        <input type="text" id="newUserPassInput" placeholder="Sifre (1-16 karakter)" maxlength="16" />
+        <button type="button" id="addUserBtn">Ekle</button>
       </div>
     </div>
     <div class="sheet-footer">
-      <div class="btn-row">
-        <button class="btn close" id="closeSifreBtn">Kapat</button>
-        <button class="btn save" id="saveSifreBtn">Kaydet</button>
-      </div>
-      <div class="status" id="sifreStatus"></div>
+      <button class="btn close" id="closeUserMgmtBtn" style="width:100%;">Kapat</button>
+      <div class="status" id="userMgmtStatus"></div>
     </div>
   </div>
 </div>
