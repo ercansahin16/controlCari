@@ -1352,22 +1352,44 @@ async function handleExcelUpload(file){
       finishUploadModal(false, '<div class="line">Excel\'de veri bulunamadi.</div>');
       return;
     }
-    var headers = rows[0];
-
+    // Baslik satiri her zaman ilk satirda olmayabilir (rapor basligi, filtre bilgisi gibi
+    // ekstra satirlar olabilir). Ilk 10 satir icinde gerekli kolonlarin hepsinin bulundugu
+    // satiri ariyoruz.
+    var headerRowIndex = -1;
     var colIndex = {};
     var missing = [];
-    REQUIRED_COLUMNS.forEach(function(rc){
-      var idx = findCol(headers, rc.match);
-      colIndex[rc.label] = idx;
-      if (idx === -1) missing.push(rc.label);
-    });
-    if (missing.length > 0){
+    var searchLimit = Math.min(10, rows.length);
+    for (var hr = 0; hr < searchLimit; hr++){
+      var testHeaders = rows[hr];
+      var testColIndex = {};
+      var testMissing = [];
+      REQUIRED_COLUMNS.forEach(function(rc){
+        var idx = findCol(testHeaders, rc.match);
+        testColIndex[rc.label] = idx;
+        if (idx === -1) testMissing.push(rc.label);
+      });
+      if (testMissing.length === 0){
+        headerRowIndex = hr;
+        colIndex = testColIndex;
+        missing = [];
+        break;
+      }
+      // en az eksigi olan satiri hata mesajinda gostermek icin sakla
+      if (headerRowIndex === -1 || testMissing.length < missing.length || missing.length === 0){
+        missing = testMissing;
+      }
+    }
+
+    if (headerRowIndex === -1){
       finishUploadModal(false,
-        '<div class="line">Eksik kolon(lar): <b>' + escapeHtml(missing.join(", ")) + '</b></div>' +
+        '<div class="line">Excel\'in ilk ' + searchLimit + ' satirinda gerekli kolonlarin hepsini icinde barindiran bir baslik satiri bulunamadi.</div>' +
+        '<div class="line">En yakin satirda eksik olan(lar): <b>' + escapeHtml(missing.join(", ")) + '</b></div>' +
         '<div class="line" style="margin-top:8px;">' + escapeHtml(requiredColumnsText()) + '</div>'
       );
       return;
     }
+
+    var headers = rows[headerRowIndex];
 
     var unvanCol = colIndex["Ünvan"];
     var kategori1Col = colIndex["Cari Kategori 1"];
@@ -1386,7 +1408,7 @@ async function handleExcelUpload(file){
     });
 
     document.getElementById("uploadProgressText").textContent = "Basliyor...";
-    var count = 0, total = rows.length - 1;
+    var count = 0, total = rows.length - (headerRowIndex + 1);
     var yeniPlakalar = {};
     var afterTotals = {};
     var newIds = {};
@@ -1395,7 +1417,7 @@ async function handleExcelUpload(file){
     var oldById = {};
     cariSnapshotAtStart.forEach(function(c){ oldById[c.id] = c; });
 
-    for (var i = 1; i < rows.length; i++){
+    for (var i = headerRowIndex + 1; i < rows.length; i++){
       var r = rows[i];
       var nm = (r[unvanCol] || "").toString().trim();
       if (!nm) continue;
