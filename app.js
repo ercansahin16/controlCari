@@ -632,7 +632,7 @@ function render(){
       var c = filtered[i];
       var isFlagged = effFlagged(c);
       var cls = isFlagged ? " flagged" : (c.paymentReported ? " paid" : "");
-      if (isDueAlert(c)) cls += " due-alert";
+      if (isDueToday(c)) cls += " due-alert";
       var debtClass = (c.debt || 0) === 0 ? " zero" : "";
       html += '<div class="row' + cls + '" data-id="' + escapeAttr(c.id) + '">';
       html += '  <div class="left">';
