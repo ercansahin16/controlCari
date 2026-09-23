@@ -549,6 +549,49 @@ function pendingPaymentsIn(list){
   return list.filter(function(c){ return c.paymentReported && !c.paymentReviewed; });
 }
 
+function isDueAlert(c){
+  if (!c.due) return false;
+  var d = new Date(c.due + "T00:00:00");
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  if (d > today) return false;
+  return c.dueReadFor !== c.due;
+}
+function dueAlertsIn(list){
+  return list.filter(function(c){ return c.due && new Date(c.due + "T00:00:00") <= (function(){ var t = new Date(); t.setHours(0,0,0,0); return t; })(); });
+}
+
+function renderDueAlertList(){
+  var visible = getVisibleCariler();
+  var list = dueAlertsIn(visible).sort(function(a, b){ return new Date(a.due) - new Date(b.due); });
+  var container = document.getElementById("dueAlertList");
+  if (list.length === 0){
+    container.innerHTML = '<div class="empty" style="padding:20px;">Odeme tarihi gelmis cari yok.</div>';
+    return;
+  }
+  var html = "";
+  list.forEach(function(c){
+    var isRead = c.dueReadFor === c.due;
+    html += '<div class="history-item' + (isRead ? " read" : "") + '" data-id="' + escapeAttr(c.id) + '">';
+    html += '  <div class="hname">' + escapeHtml(c.name) + '</div>';
+    html += '  <div class="hmeta">' + escapeHtml(c.plaka || "Plaka yok") + '</div>';
+    html += '  <div class="hnote">Beklenen tarih: ' + escapeHtml(fmtDateISOtoTR(c.due)) + ' | Bakiye: ' + fmtMoney(c.debt) + '</div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+  container.querySelectorAll(".history-item[data-id]").forEach(function(el){
+    el.addEventListener("click", async function(){
+      var id = el.getAttribute("data-id");
+      var c = cariler.find(function(x){ return x.id === id; });
+      if (c && c.dueReadFor !== c.due){
+        try { await setDoc(doc(db, CARI_COLLECTION, id), { dueReadFor: c.due }, { merge: true }); }
+        catch (e) { console.error("[cariTakip] okundu isaretlenemedi:", e); }
+      }
+      document.getElementById("dueAlertOverlay").classList.remove("show");
+      openDetail(id);
+    });
+  });
+}
+
 var activeQuickFilter = null; // null | "flagged" | "noted"
 
 function render(){
@@ -624,6 +667,11 @@ function render(){
   var badge = document.getElementById("paymentBadge");
   if (pendingCount > 0){ badge.textContent = pendingCount; badge.classList.remove("hidden"); }
   else { badge.classList.add("hidden"); }
+
+  var dueAlertCount = visible.filter(function(c){ return isDueAlert(c); }).length;
+  var dueBadge = document.getElementById("dueAlertBadge");
+  if (dueAlertCount > 0){ dueBadge.textContent = dueAlertCount; dueBadge.classList.remove("hidden"); }
+  else { dueBadge.classList.add("hidden"); }
 }
 
 // ---------- Ozel takvim ----------
@@ -724,7 +772,7 @@ function openDetail(id){
   if (c.sonTahTarihi) metaParts.push("Son Tahsilat: " + c.sonTahTarihi);
   document.getElementById("detailMeta").textContent = metaParts.join(" | ");
 
-  document.getElementById("debtInput").value = c.debt || 0;
+  document.getElementById("debtInput").value = fmtMoney(c.debt || 0);
   document.getElementById("sabitNotInput").value = c.sabitNot || "";
   document.getElementById("noteInput").value = c.note || "";
 
@@ -739,7 +787,7 @@ function openDetail(id){
   var paidSw = document.getElementById("paidSwitch");
   paidSw.classList.toggle("on", !!c.paymentReported);
   paidSw.classList.toggle("paidsw", !!c.paymentReported);
-  document.getElementById("paidAmountInput").value = c.paymentAmount || "";
+  document.getElementById("paidAmountInput").value = c.paymentAmount ? fmtMoney(c.paymentAmount) : "";
   document.getElementById("paidAmountRow").classList.toggle("show", !!c.paymentReported);
 
   document.getElementById("saveStatus").textContent = "";
@@ -849,11 +897,11 @@ async function saveCurrentNote(){
   if (!currentDocId) return;
   var status = document.getElementById("saveStatus");
   var c = cariler.find(function(x){ return x.id === currentDocId; });
-  var debtVal = parseFloat(document.getElementById("debtInput").value);
+  var debtVal = parseNumber(document.getElementById("debtInput").value);
   if (isNaN(debtVal)) debtVal = 0;
 
   var paid = document.getElementById("paidSwitch").classList.contains("on");
-  var paidAmount = parseFloat(document.getElementById("paidAmountInput").value);
+  var paidAmount = parseNumber(document.getElementById("paidAmountInput").value);
   if (isNaN(paidAmount)) paidAmount = 0;
 
   var newValues = {
@@ -1535,6 +1583,7 @@ function initRealtime(){
           lastAction: d.lastAction || "",
           lastChangeDetail: d.lastChangeDetail || "",
           sabitNot: d.sabitNot || "",
+          dueReadFor: d.dueReadFor || "",
           lastEditedBy: d.lastEditedBy || "", lastEditedAtLabel: fmtTimestamp(d.lastEditedAt)
         });
       });
@@ -1697,6 +1746,13 @@ function wireHamburger(){
   on("closePaymentBtn", "click", function(){ document.getElementById("paymentOverlay").classList.remove("show"); });
   on("paymentOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
 
+  on("dueAlertBtn", "click", function(){
+    renderDueAlertList();
+    document.getElementById("dueAlertOverlay").classList.add("show");
+  });
+  on("closeDueAlertBtn", "click", function(){ document.getElementById("dueAlertOverlay").classList.remove("show"); });
+  on("dueAlertOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+
   on("closeUserMgmtBtn", "click", function(){ document.getElementById("userMgmtOverlay").classList.remove("show"); });
   on("userMgmtOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
   on("addUserBtn", "click", async function(){
@@ -1782,7 +1838,17 @@ function wireEvents(){
   on("saveBtn", "click", saveCurrentNote);
   on("clearDetailBtn", "click", clearCurrentDetail);
   on("detailEditor", "click", function(){ if (currentDocId) showChangeDetail(currentDocId); });
-  on("searchBox", "input", render);
+  on("searchBox", "input", function(){
+    document.getElementById("searchClearBtn").classList.toggle("show", this.value.length > 0);
+    render();
+  });
+  on("searchClearBtn", "click", function(){
+    var box = document.getElementById("searchBox");
+    box.value = "";
+    this.classList.remove("show");
+    box.focus();
+    render();
+  });
   on("chipFlag", "click", function(){ activeQuickFilter = activeQuickFilter === "flagged" ? null : "flagged"; render(); });
   on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
   on("fileInput", "change", function(e){ var f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; });
