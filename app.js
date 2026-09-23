@@ -994,7 +994,7 @@ function renderPaymentList(){
   var pending = pendingPaymentsIn(visible);
   var container = document.getElementById("paymentList");
   if (pending.length === 0){
-    container.innerHTML = '<div class="empty" style="padding:20px;">Onay bekleyen odeme bildirimi yok.</div>';
+    container.innerHTML = '<div class="empty" style="padding:20px;">Plasiyerden ödeme girişi yok.</div>';
     return;
   }
   var html = "";
