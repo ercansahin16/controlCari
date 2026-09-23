@@ -319,20 +319,18 @@ async function openBasariPanel(){
   var body = document.getElementById("basariBody");
   body.innerHTML = '<div class="empty">Hesaplaniyor...</div>';
   try {
-    var today = new Date();
-    var yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-    var dayBefore = new Date(today); dayBefore.setDate(today.getDate() - 2);
-    var yStr = dateStr(yesterday), bStr = dateStr(dayBefore);
+    var snap = await getDocs(collection(db, GUNLUK_BAKIYE_COLLECTION));
+    var days = [];
+    snap.forEach(function(d){ days.push({ date: d.id, data: d.data() || {} }); });
+    days.sort(function(a, b){ return b.date.localeCompare(a.date); }); // en yeni once
 
-    var ySnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, yStr));
-    var bSnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, bStr));
-
-    if (!ySnap.exists() || !bSnap.exists()){
-      body.innerHTML = '<div class="empty">Dun (' + escapeHtml(fmtDateISOtoTR(yStr)) + ') icin karsilastirma yapilamiyor.<br/>Hem dun hem bir onceki gun icin Excel yuklemesi olmasi gerekiyor.</div>';
+    if (days.length < 2){
+      body.innerHTML = '<div class="empty">Karsilastirma icin en az iki farkli Excel yuklemesi (farkli gunlerde) gerekiyor.</div>';
       return;
     }
-    var yData = ySnap.data() || {};
-    var bData = bSnap.data() || {};
+    var afterDay = days[0];  // en son yukleme
+    var beforeDay = days[1]; // ondan onceki en son yukleme (gun atlansa bile dogru calisir)
+    var yData = afterDay.data, bData = beforeDay.data;
     var topPlaka = null, topCollected = -Infinity;
     Object.keys(yData).forEach(function(plaka){
       var before = bData[plaka] || 0;
@@ -340,8 +338,9 @@ async function openBasariPanel(){
       var collected = before - after;
       if (collected > topCollected){ topCollected = collected; topPlaka = plaka; }
     });
+    var rangeLabel = fmtDateISOtoTR(beforeDay.date) + " - " + fmtDateISOtoTR(afterDay.date);
     if (!topPlaka || topCollected <= 0){
-      body.innerHTML = '<div class="empty">Dun (' + escapeHtml(fmtDateISOtoTR(yStr)) + ') hicbir plakada net tahsilat olmamis.</div>';
+      body.innerHTML = '<div class="empty">' + escapeHtml(rangeLabel) + ' arasinda hicbir plakada net tahsilat olmamis.</div>';
       return;
     }
     var isim = soforAdi(topPlaka);
@@ -350,7 +349,7 @@ async function openBasariPanel(){
     html += '  <div class="plate">' + escapeHtml(topPlaka) + '</div>';
     if (isim) html += '  <div class="sofor">' + escapeHtml(isim) + '</div>';
     html += '  <div class="amount">' + fmtMoney(topCollected) + '</div>';
-    html += '  <div class="caption">Dun (' + escapeHtml(fmtDateISOtoTR(yStr)) + ') en cok tahsilat yapan plaka</div>';
+    html += '  <div class="caption">' + escapeHtml(rangeLabel) + ' arasinda en cok tahsilat yapan plaka</div>';
     html += '</div>';
     body.innerHTML = html;
   } catch (e) {
@@ -549,15 +548,21 @@ function pendingPaymentsIn(list){
   return list.filter(function(c){ return c.paymentReported && !c.paymentReviewed; });
 }
 
-function isDueAlert(c){
+function todayISO(){ return dateStr(new Date()); }
+
+function isDueToday(c){
+  // Gorsel vurgu (neon kenarlik) icin: okunma durumundan bagimsiz, sadece tarihe bakar.
   if (!c.due) return false;
   var d = new Date(c.due + "T00:00:00");
   var today = new Date(); today.setHours(0, 0, 0, 0);
-  if (d > today) return false;
-  return c.dueReadFor !== c.due;
+  return d <= today;
+}
+function isDueAlert(c){
+  // Bildirim SAYACI (rozet) icin: sadece henuz "okunmamis" olanlari sayar.
+  return isDueToday(c) && c.dueReadFor !== c.due;
 }
 function dueAlertsIn(list){
-  return list.filter(function(c){ return c.due && new Date(c.due + "T00:00:00") <= (function(){ var t = new Date(); t.setHours(0,0,0,0); return t; })(); });
+  return list.filter(function(c){ return isDueToday(c); });
 }
 
 function renderDueAlertList(){
@@ -587,7 +592,18 @@ function renderDueAlertList(){
         catch (e) { console.error("[cariTakip] okundu isaretlenemedi:", e); }
       }
       document.getElementById("dueAlertOverlay").classList.remove("show");
-      openDetail(id);
+      // cariyi listede bulup gostermek icin arama/hizli-filtreyi temizle, sonra oraya kaydir
+      var searchBoxEl = document.getElementById("searchBox");
+      if (searchBoxEl.value){
+        searchBoxEl.value = "";
+        document.getElementById("searchClearBtn").classList.remove("show");
+      }
+      activeQuickFilter = null;
+      render();
+      setTimeout(function(){
+        var rowEl = document.querySelector('.row[data-id="' + id + '"]');
+        if (rowEl) rowEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 60);
     });
   });
 }
@@ -601,6 +617,7 @@ function render(){
   var filtered = visible.filter(function(c){ return !q || c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
   if (activeQuickFilter === "flagged") filtered = filtered.filter(function(c){ return effFlagged(c); });
   if (activeQuickFilter === "noted") filtered = filtered.filter(function(c){ return !!c.note; });
+  if (activeQuickFilter === "duetoday") filtered = filtered.filter(function(c){ return c.due === todayISO(); });
 
   if (visible.length === 0){
     list.innerHTML = currentRole === "sales"
@@ -660,9 +677,11 @@ function render(){
   document.getElementById("sumNoted").textContent = visible.filter(function(c){ return !!c.note; }).length;
   document.getElementById("sumDebt").textContent = fmtMoney(visible.reduce(function(s, c){ return s + (c.debt || 0); }, 0));
   document.getElementById("sumFlag").textContent = visible.filter(function(c){ return effFlagged(c); }).length;
+  document.getElementById("sumDueToday").textContent = visible.filter(function(c){ return c.due === todayISO(); }).length;
 
   document.getElementById("chipNoted").classList.toggle("active", activeQuickFilter === "noted");
   document.getElementById("chipFlag").classList.toggle("active", activeQuickFilter === "flagged");
+  document.getElementById("chipDueToday").classList.toggle("active", activeQuickFilter === "duetoday");
 
   var pendingCount = pendingPaymentsIn(visible).length;
   var badge = document.getElementById("paymentBadge");
@@ -1867,6 +1886,7 @@ function wireEvents(){
   });
   on("chipFlag", "click", function(){ activeQuickFilter = activeQuickFilter === "flagged" ? null : "flagged"; render(); });
   on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
+  on("chipDueToday", "click", function(){ activeQuickFilter = activeQuickFilter === "duetoday" ? null : "duetoday"; render(); });
   on("fileInput", "change", function(e){ var f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; });
   on("uploadCloseBtn", "click", function(){ document.getElementById("uploadOverlay").classList.remove("show"); });
   wireCalendar();
