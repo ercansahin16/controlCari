@@ -66,7 +66,14 @@
   .upload-btn{ flex:1; background:var(--accent); color:#fff; border:none; border-radius:8px; padding:8px 10px; font-size:12px; font-weight:600; text-align:center; display:block; }
   input[type=file]{ display:none; }
   .required-cols{ font-size:9px; color:var(--muted); margin-top:5px; line-height:1.4; }
+  .search-wrap{ position:relative; margin-top:8px; }
   .search{ margin-top:8px; width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:7px 9px; color:var(--text); font-size:12px; }
+  .search-wrap{ position:relative; margin-top:8px; }
+  .search-wrap .search{ margin-top:0; padding-right:30px; }
+  .search-clear{ position:absolute; right:6px; top:50%; transform:translateY(-50%); background:var(--card2); border:1px solid var(--border); color:var(--muted); width:20px; height:20px; border-radius:50%; font-size:11px; line-height:1; cursor:pointer; display:none; align-items:center; justify-content:center; }
+  .search-clear.show{ display:flex; }
+  .search-clear{ position:absolute; right:6px; top:50%; transform:translateY(-50%); background:var(--card2); border:1px solid var(--border); color:var(--muted); width:20px; height:20px; border-radius:50%; font-size:11px; line-height:1; cursor:pointer; display:none; align-items:center; justify-content:center; }
+  .search-clear.show{ display:flex; }
   .summary{ display:flex; gap:6px; margin-top:8px; }
   .chip{ flex:1; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:6px 8px; text-align:center; }
   .chip.clickable{ cursor:pointer; }
@@ -234,6 +241,8 @@
   .history-item .hname{ font-size:11.5px; font-weight:600; }
   .history-item .hmeta{ font-size:9.5px; color:var(--accent); margin-top:2px; }
   .history-item .hnote{ font-size:10.5px; color:var(--text); margin-top:3px; }
+  .history-item.read{ opacity:.55; }
+  .history-item.read .hname, .history-item.read .hnote{ color:var(--muted); }
 
   #nightLock{ position:fixed; inset:0; background:var(--bg); z-index:60; display:none; align-items:center; justify-content:center; padding:28px; text-align:center; }
   #nightLock.show{ display:flex; }
@@ -241,6 +250,46 @@
   #nightLock .icon{ font-size:34px; margin-bottom:10px; }
   #nightLock h3{ font-size:14px; margin:0 0 8px 0; }
   #nightLock p{ font-size:12px; color:var(--muted); line-height:1.6; }
+
+  /* ---- Masaustu gorunumu (mobil bu bolumden etkilenmez) ---- */
+  @media (min-width: 900px){
+    body{ max-width: 1100px; font-size: 13.5px; }
+    .topbar{ padding: 20px 28px 16px 28px; }
+    .topbar h1{ font-size: 21px; }
+    #cariCountLabel{ font-size: 13px; }
+    .icon-btn{ width: 36px; height: 36px; font-size: 16px; }
+    #userInfo, #minBakiyeLabel, #veriTarihiLabel, #connStatus{ font-size: 12px; }
+    .upload-row{ max-width: 460px; }
+    .upload-btn{ padding: 11px 14px; font-size: 13px; }
+    .required-cols{ font-size: 10.5px; }
+    .search-wrap{ max-width: 460px; }
+    .search{ padding: 10px 12px; font-size: 13px; }
+    .filter-row{ max-width: 640px; }
+    .filter-row select{ padding: 9px; font-size: 12.5px; }
+    .summary{ max-width: 640px; }
+    .chip{ padding: 12px 14px; }
+    .chip .n{ font-size: 17px; }
+    .chip .l{ font-size: 11.5px; }
+    .list{
+      padding: 16px 28px 28px 28px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 14px;
+      align-items: start;
+    }
+    .row{ margin-bottom: 0; padding: 14px 16px; transition: transform .12s, border-color .12s; }
+    .row:hover{ border-color: var(--accent); transform: translateY(-2px); cursor: pointer; }
+    .row .name{ font-size: 14px; }
+    .row .debt{ font-size: 15px; }
+    .empty{ grid-column: 1 / -1; }
+
+    /* Modallari asagidan acilan sheet yerine ortalanmis dialog gibi goster */
+    .overlay{ align-items: center; justify-content: center; }
+    .sheet{ max-width: 480px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+    #nightBypassOverlay{ align-items: center; justify-content: center; }
+
+    .lock-box{ max-width: 340px; }
+  }
 </style>
 </head>
 <body>
@@ -291,6 +340,7 @@
   <div class="topbar-head">
     <h1>LED Saha <span id="cariCountLabel">(0)</span></h1>
     <button class="icon-btn" id="paymentIconBtn">💰<span class="badge hidden" id="paymentBadge">0</span></button>
+    <button class="icon-btn" id="dueAlertBtn">🔔<span class="badge hidden" id="dueAlertBadge">0</span></button>
     <button class="icon-btn" id="hamburgerBtn">☰</button>
     <div id="hamburgerMenu" class="hidden">
       <a href="#" id="menuTahsilatDurumu">📊 Tahsilat Durumu</a>
@@ -317,7 +367,10 @@
     <input type="file" id="fileInput" accept=".xlsx,.xls" />
   </div>
   <div class="required-cols" id="requiredCols"></div>
-  <input class="search" id="searchBox" placeholder="Cari ara..." />
+  <div class="search-wrap">
+    <input class="search" id="searchBox" placeholder="Cari ara..." />
+    <button type="button" class="search-clear" id="searchClearBtn">✕</button>
+  </div>
   <div class="filter-row hidden" id="adminFilterRow">
     <select id="filterKategori1"><option value="">Tum Bolgeler</option></select>
     <select id="filterPlaka"><option value="">Tum Plakalar</option></select>
@@ -343,7 +396,7 @@
     <div class="sheet-body">
       <div class="field">
         <label>Kalan Bakiye</label>
-        <input type="number" step="0.01" inputmode="decimal" id="debtInput" />
+        <input type="text" inputmode="decimal" id="debtInput" />
       </div>
 
       <div class="toggle-row">
@@ -352,7 +405,7 @@
       </div>
       <div class="paid-amount-row field" id="paidAmountRow">
         <label>Alinan Tutar</label>
-        <input type="number" step="0.01" inputmode="decimal" id="paidAmountInput" placeholder="0.00" />
+        <input type="text" inputmode="decimal" id="paidAmountInput" placeholder="0,00" />
       </div>
 
       <div class="toggle-row">
@@ -427,6 +480,16 @@
     <div class="sheet-footer">
       <button class="btn close" id="closePaymentBtn" style="width:100%;">Kapat</button>
       <div class="status" id="paymentStatus"></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dueAlertOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Gunu Gelen Odemeler</h2><div class="sub">Odeme tarihi bugun veya daha once gelmis cariler</div></div>
+    <div class="sheet-body" id="dueAlertList"></div>
+    <div class="sheet-footer">
+      <button class="btn close" id="closeDueAlertBtn" style="width:100%;">Kapat</button>
     </div>
   </div>
 </div>
