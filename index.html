@@ -72,7 +72,7 @@
   .search-clear-btn{ display:none; background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:0 12px; font-size:11.5px; cursor:pointer; white-space:nowrap; }
   .search-clear-btn.show{ display:block; }
   .summary{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-  .chip{ flex:1 1 calc(50% - 3px); background:var(--card); border:1px solid var(--border); border-radius:8px; padding:6px 8px; text-align:center; }
+  .chip{ flex:1 1 calc(33.333% - 4px); background:var(--card); border:1px solid var(--border); border-radius:8px; padding:6px 8px; text-align:center; }
   .chip.clickable{ cursor:pointer; }
   .chip.active{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
   .chip .n{ font-size:13px; font-weight:700; display:block; }
@@ -281,7 +281,7 @@
     .filters-clear-all{ display:none !important; }
     .filter-clear-x.show{ display:flex !important; }
 
-    .summary{ max-width: 640px; margin-top:14px; }
+    .summary{ max-width: 760px; margin-top:14px; }
     .chip{ flex:1 1 0; padding: 12px 14px; }
     .chip .n{ font-size: 17px; }
     .chip .l{ font-size: 11.5px; }
@@ -406,6 +406,8 @@
     <div class="chip"><span class="n" id="sumDebt">0</span><span class="l">Toplam Bakiye</span></div>
     <div class="chip clickable" id="chipFlag"><span class="n" id="sumFlag">0</span><span class="l">Sorunlu</span></div>
     <div class="chip clickable" id="chipDueToday"><span class="n" id="sumDueToday">0</span><span class="l">Bugun Odeyecek</span></div>
+    <div class="chip clickable" id="chipOverdue"><span class="n" id="sumOverdue">0</span><span class="l">Vadesi Gecen</span></div>
+    <div class="chip clickable" id="chipOldestSort"><span class="n" id="sumOldestDays">-</span><span class="l">En Eski Tahsilat</span></div>
   </div>
 </div>
 
@@ -502,7 +504,7 @@
 
 <div class="overlay" id="paymentOverlay">
   <div class="sheet">
-    <div class="sheet-head"><h2>Odeme Bildirimleri</h2><div class="sub" id="paymentOverlaySub">PLASİYER TAHSİL SÖZÜ</div></div>
+    <div class="sheet-head"><h2>Odeme Bildirimleri</h2><div class="sub" id="paymentOverlaySub">Onay bekleyen odeme raporlari</div></div>
     <div class="sheet-body" id="paymentList"></div>
     <div class="sheet-footer">
       <button class="btn close" id="closePaymentBtn" style="width:100%;">Kapat</button>
