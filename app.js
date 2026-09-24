@@ -557,6 +557,21 @@ function isDueToday(c){
   var today = new Date(); today.setHours(0, 0, 0, 0);
   return d <= today;
 }
+function isOverduePast(c){
+  // "Vadesi Gecen" chip'i icin: bugunu SAYMAZ, sadece bugunden ONCEKI tarihleri sayar.
+  if (!c.due) return false;
+  var d = new Date(c.due + "T00:00:00");
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  return d < today;
+}
+function maxDaysSinceCollection(list){
+  var max = null;
+  list.forEach(function(c){
+    var d = daysSinceCollection(c);
+    if (d !== null && (max === null || d > max)) max = d;
+  });
+  return max;
+}
 function isDueAlert(c){
   // Bildirim SAYACI (rozet) icin: sadece henuz "okunmamis" olanlari sayar.
   return isDueToday(c) && c.dueReadFor !== c.due;
@@ -608,7 +623,8 @@ function renderDueAlertList(){
   });
 }
 
-var activeQuickFilter = null; // null | "flagged" | "noted"
+var activeQuickFilter = null; // null | "flagged" | "noted" | "duetoday" | "overdue"
+var sortByOldestCollection = false; // "En Eski Tahsilat" chip'i ile acilir/kapanir
 
 function render(){
   var list = document.getElementById("list");
@@ -618,6 +634,7 @@ function render(){
   if (activeQuickFilter === "flagged") filtered = filtered.filter(function(c){ return effFlagged(c); });
   if (activeQuickFilter === "noted") filtered = filtered.filter(function(c){ return !!c.note; });
   if (activeQuickFilter === "duetoday") filtered = filtered.filter(function(c){ return c.due === todayISO(); });
+  if (activeQuickFilter === "overdue") filtered = filtered.filter(function(c){ return isOverduePast(c); });
 
   if (visible.length === 0){
     list.innerHTML = currentRole === "sales"
@@ -626,7 +643,17 @@ function render(){
   } else if (filtered.length === 0){
     list.innerHTML = '<div class="empty">Sonuc bulunamadi.</div>';
   } else {
-    filtered.sort(function(a, b){ return (b.debt || 0) - (a.debt || 0); });
+    if (sortByOldestCollection){
+      filtered.sort(function(a, b){
+        var da = parseTRDate(a.sonTahTarihi), db = parseTRDate(b.sonTahTarihi);
+        if (!da && !db) return 0;
+        if (!da) return -1;
+        if (!db) return 1;
+        return da - db;
+      });
+    } else {
+      filtered.sort(function(a, b){ return (b.debt || 0) - (a.debt || 0); });
+    }
     var html = "";
     for (var i = 0; i < filtered.length; i++){
       var c = filtered[i];
@@ -678,10 +705,15 @@ function render(){
   document.getElementById("sumDebt").textContent = fmtMoney(visible.reduce(function(s, c){ return s + (c.debt || 0); }, 0));
   document.getElementById("sumFlag").textContent = visible.filter(function(c){ return effFlagged(c); }).length;
   document.getElementById("sumDueToday").textContent = visible.filter(function(c){ return c.due === todayISO(); }).length;
+  document.getElementById("sumOverdue").textContent = visible.filter(function(c){ return isOverduePast(c); }).length;
+  var oldestDays = maxDaysSinceCollection(visible);
+  document.getElementById("sumOldestDays").textContent = oldestDays === null ? "-" : oldestDays;
 
   document.getElementById("chipNoted").classList.toggle("active", activeQuickFilter === "noted");
   document.getElementById("chipFlag").classList.toggle("active", activeQuickFilter === "flagged");
   document.getElementById("chipDueToday").classList.toggle("active", activeQuickFilter === "duetoday");
+  document.getElementById("chipOverdue").classList.toggle("active", activeQuickFilter === "overdue");
+  document.getElementById("chipOldestSort").classList.toggle("active", sortByOldestCollection);
 
   var pendingCount = pendingPaymentsIn(visible).length;
   var badge = document.getElementById("paymentBadge");
@@ -994,7 +1026,7 @@ function renderPaymentList(){
   var pending = pendingPaymentsIn(visible);
   var container = document.getElementById("paymentList");
   if (pending.length === 0){
-    container.innerHTML = '<div class="empty" style="padding:20px;">Plasiyerden ödeme girişi yok.</div>';
+    container.innerHTML = '<div class="empty" style="padding:20px;">Onay bekleyen odeme bildirimi yok.</div>';
     return;
   }
   var html = "";
@@ -1887,6 +1919,8 @@ function wireEvents(){
   on("chipFlag", "click", function(){ activeQuickFilter = activeQuickFilter === "flagged" ? null : "flagged"; render(); });
   on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
   on("chipDueToday", "click", function(){ activeQuickFilter = activeQuickFilter === "duetoday" ? null : "duetoday"; render(); });
+  on("chipOverdue", "click", function(){ activeQuickFilter = activeQuickFilter === "overdue" ? null : "overdue"; render(); });
+  on("chipOldestSort", "click", function(){ sortByOldestCollection = !sortByOldestCollection; render(); });
   on("fileInput", "change", function(e){ var f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; });
   on("uploadCloseBtn", "click", function(){ document.getElementById("uploadOverlay").classList.remove("show"); });
   wireCalendar();
