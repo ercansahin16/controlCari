@@ -450,25 +450,84 @@ function renderSoforList(){
 
 // (renderBasari kaldirildi; artik openBasariPanel kullaniliyor - gunluk kayitlara dayali gercek "dun" karsilastirmasi)
 
-// ---------- Yonetici filtreleri ----------
+// ---------- Yonetici filtreleri (coklu secim) ----------
+
+var filterKategori1Values = [];
+var filterPlakaValues = [];
+
+function updateFilterButtonLabels(){
+  var b1 = document.getElementById("filterKategori1Btn");
+  if (b1) b1.textContent = filterKategori1Values.length === 0 ? "Tum Bolgeler"
+    : (filterKategori1Values.length === 1 ? filterKategori1Values[0] : filterKategori1Values.length + " Bolge Secili");
+  var b2 = document.getElementById("filterPlakaBtn");
+  if (b2) b2.textContent = filterPlakaValues.length === 0 ? "Tum Plakalar"
+    : (filterPlakaValues.length === 1 ? (filterPlakaValues[0] === PLAKA_YOK ? "Plaka Yok" : filterPlakaValues[0]) : filterPlakaValues.length + " Plaka Secili");
+}
+
+function renderMultiSelectOptions(containerId, options, selectedValues, labelFn){
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var html = "";
+  options.forEach(function(opt){
+    var checked = selectedValues.indexOf(opt) !== -1;
+    var label = labelFn ? labelFn(opt) : opt;
+    html += '<label><input type="checkbox" value="' + escapeAttr(opt) + '"' + (checked ? " checked" : "") + ' /> ' + escapeHtml(label) + '</label>';
+  });
+  container.innerHTML = html;
+}
 
 function populateAdminFilters(){
-  var k1sel = document.getElementById("filterKategori1");
-  var pksel = document.getElementById("filterPlaka");
-  if (!k1sel || !pksel) return;
+  var kategori1ler = Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); });
+  filterKategori1Values = filterKategori1Values.filter(function(v){ return kategori1ler.indexOf(v) !== -1; });
+  renderMultiSelectOptions("filterKategori1Options", kategori1ler, filterKategori1Values);
 
-  var kategori1ler = Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a,b){ return a.localeCompare(b,"tr"); });
-  var curK1 = k1sel.value;
-  k1sel.innerHTML = '<option value="">Tum Bolgeler</option>';
-  kategori1ler.forEach(function(k){ var o = document.createElement("option"); o.value = k; o.textContent = k; k1sel.appendChild(o); });
-  if (curK1) k1sel.value = curK1;
+  var plakaOptions = plakaListesi.slice();
+  plakaOptions.push(PLAKA_YOK);
+  filterPlakaValues = filterPlakaValues.filter(function(v){ return plakaOptions.indexOf(v) !== -1; });
+  renderMultiSelectOptions("filterPlakaOptions", plakaOptions, filterPlakaValues, function(v){ return v === PLAKA_YOK ? "Plaka Yok" : v; });
 
-  var curPk = pksel.value;
-  pksel.innerHTML = '<option value="">Tum Plakalar</option>';
-  plakaListesi.forEach(function(p){ var o = document.createElement("option"); o.value = p; o.textContent = p; pksel.appendChild(o); });
-  var yokOpt = document.createElement("option"); yokOpt.value = PLAKA_YOK; yokOpt.textContent = "Plaka Yok"; pksel.appendChild(yokOpt);
-  if (curPk) pksel.value = curPk;
+  updateFilterButtonLabels();
 }
+
+function wireMultiSelectFilter(btnId, dropdownId, optionsContainerId, getValues, setValues, allOptionsGetter){
+  var btn = document.getElementById(btnId);
+  var dropdown = document.getElementById(dropdownId);
+  var container = document.getElementById(optionsContainerId);
+  if (!btn || !dropdown || !container) return;
+
+  btn.addEventListener("click", function(e){
+    e.stopPropagation();
+    var wasShown = dropdown.classList.contains("show");
+    document.querySelectorAll(".msel-dropdown.show").forEach(function(dd){ dd.classList.remove("show"); });
+    if (!wasShown) dropdown.classList.add("show");
+  });
+
+  container.addEventListener("change", function(e){
+    if (e.target.tagName !== "INPUT") return;
+    var vals = Array.prototype.slice.call(container.querySelectorAll("input[type=checkbox]:checked")).map(function(x){ return x.value; });
+    setValues(vals);
+    updateFilterButtonLabels();
+    render();
+  });
+
+  dropdown.querySelectorAll('button[data-act]').forEach(function(actBtn){
+    actBtn.addEventListener("click", function(){
+      var act = actBtn.getAttribute("data-act");
+      var newVals = act === "all" ? allOptionsGetter().slice() : [];
+      setValues(newVals);
+      renderMultiSelectOptions(optionsContainerId, allOptionsGetter(), newVals, optionsContainerId === "filterPlakaOptions" ? function(v){ return v === PLAKA_YOK ? "Plaka Yok" : v; } : null);
+      updateFilterButtonLabels();
+      render();
+    });
+  });
+}
+
+document.addEventListener("click", function(e){
+  document.querySelectorAll(".msel-dropdown.show").forEach(function(dd){
+    var wrap = dd.closest(".filter-item");
+    if (wrap && !wrap.contains(e.target)) dd.classList.remove("show");
+  });
+});
 
 // ---------- Gece kilidi (sadece plasiyer) ----------
 
@@ -532,12 +591,13 @@ function getVisibleCariler(){
       return currentPlakalar.indexOf(normalizePlate(c.plaka)) !== -1;
     });
   } else if (currentRole === "admin"){
-    var k1 = document.getElementById("filterKategori1") ? document.getElementById("filterKategori1").value : "";
-    var pk = document.getElementById("filterPlaka") ? document.getElementById("filterPlaka").value : "";
     base = active.filter(function(c){
-      if (k1 && c.kategori1 !== k1) return false;
-      if (pk === PLAKA_YOK && c.plaka) return false;
-      if (pk && pk !== PLAKA_YOK && normalizePlate(c.plaka) !== normalizePlate(pk)) return false;
+      if (filterKategori1Values.length > 0 && filterKategori1Values.indexOf(c.kategori1) === -1) return false;
+      if (filterPlakaValues.length > 0){
+        var matchesYok = filterPlakaValues.indexOf(PLAKA_YOK) !== -1 && !c.plaka;
+        var matchesPlate = !!c.plaka && filterPlakaValues.some(function(p){ return p !== PLAKA_YOK && normalizePlate(p) === normalizePlate(c.plaka); });
+        if (!matchesYok && !matchesPlate) return false;
+      }
       return true;
     });
   }
@@ -726,11 +786,9 @@ function render(){
   else { dueBadge.classList.add("hidden"); }
 
   if (currentRole === "admin"){
-    var k1val = document.getElementById("filterKategori1").value;
-    var pkval = document.getElementById("filterPlaka").value;
-    document.getElementById("clearKategori1Btn").classList.toggle("show", !!k1val);
-    document.getElementById("clearPlakaBtn").classList.toggle("show", !!pkval);
-    document.getElementById("clearAllFiltersBtn").classList.toggle("show", !!k1val || !!pkval);
+    document.getElementById("clearKategori1Btn").classList.toggle("show", filterKategori1Values.length > 0);
+    document.getElementById("clearPlakaBtn").classList.toggle("show", filterPlakaValues.length > 0);
+    document.getElementById("clearAllFiltersBtn").classList.toggle("show", filterKategori1Values.length > 0 || filterPlakaValues.length > 0);
   }
 }
 
@@ -1233,12 +1291,10 @@ function setAgingTabActive(id){
 
 function activeFilterNotice(){
   if (currentRole !== "admin") return "";
-  var k1 = document.getElementById("filterKategori1") ? document.getElementById("filterKategori1").value : "";
-  var pk = document.getElementById("filterPlaka") ? document.getElementById("filterPlaka").value : "";
-  if (!k1 && !pk) return "";
+  if (filterKategori1Values.length === 0 && filterPlakaValues.length === 0) return "";
   var parts = [];
-  if (k1) parts.push("Bolge=" + k1);
-  if (pk) parts.push("Plaka=" + (pk === PLAKA_YOK ? "Plaka Yok" : pk));
+  if (filterKategori1Values.length > 0) parts.push("Bolge=" + filterKategori1Values.join("/"));
+  if (filterPlakaValues.length > 0) parts.push("Plaka=" + filterPlakaValues.map(function(p){ return p === PLAKA_YOK ? "Plaka Yok" : p; }).join("/"));
   return "⚠️ Ana ekrandaki filtre uygulaniyor: " + parts.join(", ") + ". Tum carileri gormek icin ana ekrandaki filtreyi temizleyin.";
 }
 
@@ -1887,14 +1943,35 @@ function wirePaidSwitch(){
 }
 
 function wireAdminFilters(){
-  on("filterKategori1", "change", render);
-  on("filterPlaka", "change", render);
-  on("clearKategori1Btn", "click", function(){ document.getElementById("filterKategori1").value = ""; render(); });
-  on("clearPlakaBtn", "click", function(){ document.getElementById("filterPlaka").value = ""; render(); });
-  on("clearAllFiltersBtn", "click", function(){
-    document.getElementById("filterKategori1").value = "";
-    document.getElementById("filterPlaka").value = "";
+  wireMultiSelectFilter(
+    "filterKategori1Btn", "filterKategori1Dropdown", "filterKategori1Options",
+    function(){ return filterKategori1Values; },
+    function(v){ filterKategori1Values = v; },
+    function(){ return Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); }); }
+  );
+  wireMultiSelectFilter(
+    "filterPlakaBtn", "filterPlakaDropdown", "filterPlakaOptions",
+    function(){ return filterPlakaValues; },
+    function(v){ filterPlakaValues = v; },
+    function(){ var arr = plakaListesi.slice(); arr.push(PLAKA_YOK); return arr; }
+  );
+
+  on("clearKategori1Btn", "click", function(){
+    filterKategori1Values = [];
+    renderMultiSelectOptions("filterKategori1Options", Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); }), []);
+    updateFilterButtonLabels();
     render();
+  });
+  on("clearPlakaBtn", "click", function(){
+    filterPlakaValues = [];
+    var arr = plakaListesi.slice(); arr.push(PLAKA_YOK);
+    renderMultiSelectOptions("filterPlakaOptions", arr, [], function(v){ return v === PLAKA_YOK ? "Plaka Yok" : v; });
+    updateFilterButtonLabels();
+    render();
+  });
+  on("clearAllFiltersBtn", "click", function(){
+    document.getElementById("clearKategori1Btn").click();
+    document.getElementById("clearPlakaBtn").click();
   });
 }
 
