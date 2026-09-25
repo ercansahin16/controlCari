@@ -581,7 +581,9 @@ function wireNightBypass(){
 
 function getVisibleCariler(){
   var active = cariler.filter(function(c){ return c.aktif; });
-  active = active.filter(function(c){ return (c.debt || 0) >= minBakiye; });
+  // Alacakli (eksi bakiyeli) cariler alt limitten bagimsiz her zaman gosterilir --
+  // alt limit sadece kucuk, unemli olmayan POZITIF bakiyeleri gizlemek icindir.
+  active = active.filter(function(c){ var d = c.debt || 0; return d < 0 || d >= minBakiye; });
   var base = active;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
@@ -1210,6 +1212,48 @@ function renderHistoryList(){
   container.innerHTML = html;
 }
 
+function renderPasifList(){
+  var q = document.getElementById("pasifSearch").value.toLocaleLowerCase("tr").trim();
+  var pasifler = cariler.filter(function(c){ return !c.aktif; });
+  pasifler = pasifler.filter(function(c){ return !q || c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
+  pasifler.sort(function(a, b){ return a.name.localeCompare(b.name, "tr"); });
+
+  var container = document.getElementById("pasifList");
+  if (pasifler.length === 0){
+    container.innerHTML = '<div class="empty" style="padding:20px;">' + (q ? "Sonuc bulunamadi." : "Su an pasif cari yok.") + '</div>';
+    return;
+  }
+  var html = "";
+  pasifler.forEach(function(c){
+    html += '<div class="pasif-item" data-id="' + escapeAttr(c.id) + '">';
+    html += '  <div class="hname">' + escapeHtml(c.name) + '</div>';
+    html += '  <div class="hmeta">' + escapeHtml(c.kategori1 || "-") + ' | ' + escapeHtml(c.plaka || "Plaka yok") + ' | Kod: ' + escapeHtml(c.kod || "-") + '</div>';
+    html += '  <div class="hmeta">Son bilinen bakiye: ' + fmtMoney(c.debt) + ' | Son tahsilat: ' + escapeHtml(c.sonTahTarihi || "-") + '</div>';
+    if (c.lastEditedBy) html += '  <div class="hmeta">Pasife alinmadan once son duzenleyen: ' + escapeHtml(c.lastEditedBy) + (c.lastEditedAtLabel ? " - " + escapeHtml(c.lastEditedAtLabel) : "") + '</div>';
+    html += '  <button type="button" data-id="' + escapeAttr(c.id) + '">Yeniden Aktif Et</button>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+
+  container.querySelectorAll("button[data-id]").forEach(function(btn){
+    btn.addEventListener("click", async function(){
+      var id = btn.getAttribute("data-id");
+      var status = document.getElementById("pasifStatus");
+      status.textContent = "Aktif ediliyor...";
+      try {
+        await setDoc(doc(db, CARI_COLLECTION, id), {
+          aktif: true,
+          lastAction: "Elle yeniden aktif edildi (Pasif Cariler ekranindan)",
+          lastEditedBy: editorLabel(), lastEditedAt: serverTimestamp()
+        }, { merge: true });
+        status.textContent = "Aktif edildi.";
+      } catch (e) {
+        status.textContent = "Aktif edilemedi: " + e.message;
+      }
+    });
+  });
+}
+
 // ---------- Tahsilat Durumu (gecikmis cariler) ----------
 
 function parseTRDate(s){
@@ -1689,7 +1733,7 @@ function initRealtime(){
         var d = docSnap.data();
         cariler.push({
           id: docSnap.id, name: d.name || docSnap.id,
-          kategori1: d.kategori1 || "", plaka: d.plaka || "",
+          kategori1: d.kategori1 || "", plaka: d.plaka || "", kod: d.kod || "",
           debt: d.debt || 0, note: d.note || "", due: d.due || "", flagged: !!d.flagged,
           sonTahTarihi: d.sonTahTarihi || "",
           aktif: d.aktif !== false,
@@ -1801,7 +1845,7 @@ function wireHamburger(){
     );
     if (val === null) return;
     var num = parseFloat(val.toString().replace(",", "."));
-    if (isNaN(num) || num < 0){ await customAlert("Gecerli bir sayi girin.", "Uyari"); return; }
+    if (isNaN(num)){ await customAlert("Gecerli bir sayi girin.", "Uyari"); return; }
     try {
       await setDoc(ayarlarDocRef, { minBakiye: num }, { merge: true });
       await customAlert("Alt limit guncellendi: " + fmtMoney(num), "Basarili");
@@ -1838,6 +1882,18 @@ function wireHamburger(){
     renderHistoryList();
     document.getElementById("historyOverlay").classList.add("show");
   });
+
+  on("menuPasifCariler", "click", async function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    if (currentRole !== "admin"){ await customAlert("Pasif cariler sadece yoneticiler icindir.", "Yetki Yok"); return; }
+    document.getElementById("pasifSearch").value = "";
+    document.getElementById("pasifStatus").textContent = "";
+    renderPasifList();
+    document.getElementById("pasifOverlay").classList.add("show");
+  });
+  on("closePasifBtn", "click", function(){ document.getElementById("pasifOverlay").classList.remove("show"); });
+  on("pasifOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+  on("pasifSearch", "input", renderPasifList);
 
   on("closePlakaBtn", "click", function(){ document.getElementById("plakaOverlay").classList.remove("show"); });
   on("plakaOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
@@ -1903,6 +1959,7 @@ function applyMenuVisibility(){
   var msf = document.getElementById("menuSifremDegistir");
   var mps = document.getElementById("menuPlasiyerSifresi");
   var mkt = document.getElementById("menuKullaniciTanimlama");
+  var mpc = document.getElementById("menuPasifCariler");
   if (currentRole === "admin"){
     if (mp) mp.classList.remove("hidden");
     if (mg) mg.classList.remove("hidden");
@@ -1912,6 +1969,7 @@ function applyMenuVisibility(){
     if (msf) msf.classList.remove("hidden");
     if (mps) mps.classList.remove("hidden");
     if (mkt) mkt.classList.remove("hidden");
+    if (mpc) mpc.classList.remove("hidden");
     if (md) md.classList.add("hidden");
   } else {
     if (mp) mp.classList.add("hidden");
@@ -1922,6 +1980,7 @@ function applyMenuVisibility(){
     if (msf) msf.classList.add("hidden");
     if (mps) mps.classList.add("hidden");
     if (mkt) mkt.classList.add("hidden");
+    if (mpc) mpc.classList.add("hidden");
     if (md) md.classList.remove("hidden");
   }
 }
