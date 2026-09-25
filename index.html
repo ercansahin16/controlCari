@@ -252,6 +252,10 @@
   .history-item .hnote{ font-size:10.5px; color:var(--text); margin-top:3px; }
   .history-item.read{ opacity:.55; }
   .history-item.read .hname, .history-item.read .hnote{ color:var(--muted); }
+  .pasif-item{ background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:9px 10px; margin-bottom:7px; }
+  .pasif-item .hname{ font-size:11.5px; font-weight:600; }
+  .pasif-item .hmeta{ font-size:9.5px; color:var(--muted); margin-top:2px; }
+  .pasif-item button{ margin-top:8px; width:100%; background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok); border-radius:6px; padding:7px; font-size:11px; font-weight:600; cursor:pointer; }
 
   #nightLock{ position:fixed; inset:0; background:var(--bg); z-index:60; display:none; align-items:center; justify-content:center; padding:28px; text-align:center; }
   #nightLock.show{ display:flex; }
@@ -377,6 +381,7 @@
       <a href="#" id="menuBasari">🏆 Dunun Basarisi</a>
       <a href="#" id="menuPlakaYonetimi">🚚 Plaka Yonetimi</a>
       <a href="#" id="menuGecmis">📜 Gecmis</a>
+      <a href="#" id="menuPasifCariler">📦 Pasif Cariler</a>
       <a href="#" id="menuLogout" class="danger">🚪 Cikis</a>
     </div>
   </div>
@@ -553,6 +558,20 @@
     </div>
     <div class="sheet-footer">
       <button class="btn close" id="closeHistoryBtn" style="width:100%;">Kapat</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="pasifOverlay">
+  <div class="sheet">
+    <div class="sheet-head"><h2>Pasif Cariler</h2><div class="sub">Son Excel yuklemesinde artik gecmeyen ve otomatik pasife alinan cariler. Notlari/gecmisi kaybolmaz.</div></div>
+    <div class="sheet-body">
+      <input class="search" id="pasifSearch" placeholder="Cari adina gore ara..." style="margin:0 0 8px 0;" />
+      <div id="pasifList"></div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn close" id="closePasifBtn" style="width:100%;">Kapat</button>
+      <div class="status" id="pasifStatus"></div>
     </div>
   </div>
 </div>
