@@ -256,7 +256,11 @@ function watchSofor(){
 
 function updateMinBakiyeLabel(){
   var el = document.getElementById("minBakiyeLabel");
-  if (el) el.textContent = "Alt limit: " + fmtMoney(minBakiye) + " (bu tutarin altindaki bakiyeler gizleniyor)";
+  if (!el) return;
+  // Alt limit sadece yonetici tarafinda gecerli -- plasiyer tum carilerini gorur.
+  el.textContent = (currentRole === "admin")
+    ? "Alt limit: " + fmtMoney(minBakiye) + " (bu tutarin altindaki bakiyeler gizleniyor)"
+    : "";
 }
 
 function watchAyarlar(){
@@ -619,9 +623,13 @@ function wireNightBypass(){
 
 function getVisibleCariler(){
   var active = cariler.filter(function(c){ return c.aktif; });
-  // Alacakli (eksi bakiyeli) cariler alt limitten bagimsiz her zaman gosterilir --
-  // alt limit sadece kucuk, unemli olmayan POZITIF bakiyeleri gizlemek icindir.
-  active = active.filter(function(c){ var d = c.debt || 0; return d < 0 || d >= minBakiye; });
+  // Alt limit SADECE yonetici tarafinda uygulanir. Plasiyer kendi plakasina
+  // atanmis TUM carileri gormeli, bakiye tutari ne olursa olsun.
+  if (currentRole === "admin"){
+    // Alacakli (eksi bakiyeli) cariler alt limitten bagimsiz her zaman gosterilir --
+    // alt limit sadece kucuk, unemli olmayan POZITIF bakiyeleri gizlemek icindir.
+    active = active.filter(function(c){ var d = c.debt || 0; return d < 0 || d >= minBakiye; });
+  }
   var base = active;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
@@ -1877,7 +1885,7 @@ function wireHamburger(){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ await customAlert("Alt limit sadece yoneticiler tarafindan degistirilebilir.", "Yetki Yok"); return; }
     var val = await customPrompt(
-      "Bu tutarin altindaki bakiyeler tum listelerden (plasiyer ve yonetici) gizlenir.\nMevcut deger: " + fmtMoney(minBakiye),
+      "Bu tutarin altindaki bakiyeler sadece yonetici listesinde gizlenir (plasiyer tum carilerini her zaman gorur).\nMevcut deger: " + fmtMoney(minBakiye),
       "Alt Limit Belirle", String(minBakiye)
     );
     if (val === null) return;
@@ -2167,6 +2175,7 @@ function applyRoleUI(){
     userInfo.innerHTML = 'Plasiyer: <b>' + escapeHtml(plakaLabel) + (isim ? " - " + escapeHtml(isim) : "") + '</b>';
   }
   applyMenuVisibility();
+  updateMinBakiyeLabel();
 }
 
 function unlockApp(){
