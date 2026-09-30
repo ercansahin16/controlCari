@@ -370,23 +370,38 @@ async function openBasariPanel(){
     var yData = afterDay.data, bData = beforeDay.data;
     var topPlaka = null, topCollected = -Infinity;
     Object.keys(yData).forEach(function(plaka){
+      if (plaka === "toplamBakiye") return;
       var before = bData[plaka] || 0;
       var after = yData[plaka];
       var collected = before - after;
       if (collected > topCollected){ topCollected = collected; topPlaka = plaka; }
     });
     var rangeLabel = fmtDateISOtoTR(beforeDay.date) + " - " + fmtDateISOtoTR(afterDay.date);
-    if (!topPlaka || topCollected <= 0){
-      body.innerHTML = '<div class="empty">' + escapeHtml(rangeLabel) + ' arasinda hicbir plakada net tahsilat olmamis.</div>';
+
+    var toplamTahsilat = null;
+    if (yData.hasOwnProperty("toplamBakiye") && bData.hasOwnProperty("toplamBakiye")){
+      toplamTahsilat = bData.toplamBakiye - yData.toplamBakiye;
+    }
+
+    if ((!topPlaka || topCollected <= 0) && (toplamTahsilat === null || toplamTahsilat <= 0)){
+      body.innerHTML = '<div class="empty">' + escapeHtml(rangeLabel) + ' arasinda net tahsilat olmamis.</div>';
       return;
     }
-    var isim = soforAdi(topPlaka);
+
     var html = '<div class="basari-box">';
-    html += '  <div class="trophy">🏆</div>';
-    html += '  <div class="plate">' + escapeHtml(topPlaka) + '</div>';
-    if (isim) html += '  <div class="sofor">' + escapeHtml(isim) + '</div>';
-    html += '  <div class="amount">' + fmtMoney(topCollected) + '</div>';
-    html += '  <div class="caption">' + escapeHtml(rangeLabel) + ' arasinda en cok tahsilat yapan plaka</div>';
+    if (toplamTahsilat !== null){
+      html += '  <div class="total-tahsilat">Toplam Tahsilat<br/><span>' + fmtMoney(toplamTahsilat) + '</span></div>';
+    }
+    if (topPlaka && topCollected > 0){
+      var isim = soforAdi(topPlaka);
+      html += '  <div class="trophy">🏆</div>';
+      html += '  <div class="plate">' + escapeHtml(topPlaka) + '</div>';
+      if (isim) html += '  <div class="sofor">' + escapeHtml(isim) + '</div>';
+      html += '  <div class="amount">' + fmtMoney(topCollected) + '</div>';
+      html += '  <div class="caption">' + escapeHtml(rangeLabel) + ' arasinda en cok tahsilat yapan plaka</div>';
+    } else {
+      html += '  <div class="caption">' + escapeHtml(rangeLabel) + '</div>';
+    }
     html += '</div>';
     body.innerHTML = html;
   } catch (e) {
@@ -1464,7 +1479,11 @@ async function loadTrendData(startStr, endStr){
   var byDate = {};
   snap.forEach(function(d){
     var data = d.data() || {};
-    var total = Object.keys(data).reduce(function(s, k){ return s + (data[k] || 0); }, 0);
+    // toplamBakiye varsa (plakasi olsun olmasin TUM carileri kapsayan gercek gunluk toplam) onu kullan;
+    // eski kayitlarda (bu alan eklenmeden once) sadece plakali carilerin toplamina dus.
+    var total = data.hasOwnProperty("toplamBakiye")
+      ? data.toplamBakiye
+      : Object.keys(data).reduce(function(s, k){ return s + (data[k] || 0); }, 0);
     byDate[d.id] = total;
   });
 
@@ -1658,6 +1677,7 @@ async function handleExcelUpload(file){
     var afterTotals = {};
     var newIds = {};
     var notesClearedCount = 0;
+    var grandDebtTotal = 0; // plakasi olsun olmasin TUM carilerin toplam bakiyesi (gunluk toplam tahsilat icin)
 
     var oldById = {};
     cariSnapshotAtStart.forEach(function(c){ oldById[c.id] = c; });
@@ -1674,6 +1694,7 @@ async function handleExcelUpload(file){
       var sonTahTarihi = (r[sonTahCol] || "").toString().trim();
       var id = kod ? docIdFor(kod) : docIdFor(nm);
       newIds[id] = true;
+      grandDebtTotal += debt;
 
       var updateData = {
         name: nm, kod: kod, kategori1: kategori1, plaka: plaka, debt: debt,
@@ -1682,15 +1703,18 @@ async function handleExcelUpload(file){
       };
 
       // Yeni tahsilat tarihi eskisinden ilerideyse (yeni bir odeme gelmis demektir),
-      // Gecici (Not) otomatik temizlenir -- Sabit (Not) hicbir zaman dokunulmaz.
+      // Gecici (Not) VE Odeme Beklenen Tarihi otomatik temizlenir -- Sabit (Not) hicbir zaman dokunulmaz.
       var oldC = oldById[id];
       if (oldC){
         var oldDate = parseTRDate(oldC.sonTahTarihi);
         var newDate = parseTRDate(sonTahTarihi);
-        if (newDate && (!oldDate || newDate > oldDate) && oldC.note){
-          updateData.note = "";
-          updateData.lastAction = "Yeni tahsilat tespit edildi, gecici not otomatik temizlendi";
-          updateData.lastChangeDetail = 'Gecici not otomatik temizlendi (onceki: "' + oldC.note + '"). Sebep: Son Tahsilat Tarihi ' + (oldC.sonTahTarihi || "-") + ' -> ' + sonTahTarihi + ' olarak ilerledi.';
+        if (newDate && (!oldDate || newDate > oldDate) && (oldC.note || oldC.due)){
+          var clearedParts = [];
+          if (oldC.note){ updateData.note = ""; clearedParts.push('gecici not ("' + oldC.note + '")'); }
+          if (oldC.due){ updateData.due = ""; clearedParts.push('odeme beklenen tarih (' + fmtDateISOtoTR(oldC.due) + ')'); }
+          var clearedWhat = (oldC.note && oldC.due) ? "gecici not ve odeme beklenen tarih" : (oldC.note ? "gecici not" : "odeme beklenen tarih");
+          updateData.lastAction = "Yeni tahsilat tespit edildi, " + clearedWhat + " otomatik temizlendi";
+          updateData.lastChangeDetail = 'Otomatik temizlendi: ' + clearedParts.join(", ") + '. Sebep: Son Tahsilat Tarihi ' + (oldC.sonTahTarihi || "-") + ' -> ' + sonTahTarihi + ' olarak ilerledi.';
           updateData.lastEditedBy = "Sistem (Excel yuklemesi)";
           updateData.lastEditedAt = serverTimestamp();
           notesClearedCount++;
@@ -1729,14 +1753,17 @@ async function handleExcelUpload(file){
       if (collected > topCollected){ topCollected = collected; topPlaka = yeniPlakalar[np]; }
     });
 
-    // gunun toplam bakiyelerini (plaka bazli) bugunun gunluk kaydina yaz -- "Dunun Basarisi"
-    // gercek takvim gunune gore hesaplanabilsin diye. Ayni gun birden fazla yukleme yapilirsa
-    // bu kayit sadece guncellenir, ayri gun olusturmaz.
-    if (Object.keys(afterTotals).length > 0){
+    // gunun toplam bakiyelerini (plaka bazli + genel toplam) bugunun gunluk kaydina yaz --
+    // "Dunun Basarisi" ve "Tahsilat Trendi" gercek takvim gunune gore hesaplanabilsin diye.
+    // Ayni gun birden fazla yukleme yapilirsa (sabah + aksam) bu kayit sadece guncellenir,
+    // ayri gun olusturmaz -- boylece gunun EN SON durumu esas alinir ve o gun icinde yapilan
+    // tum yuklemelerin toplam etkisi dogru sekilde bir sonraki gunle kiyaslanabilir.
+    if (count > 0){
       try {
         var todayStr = dateStr(new Date());
         var gunlukData = {};
         Object.keys(afterTotals).forEach(function(np){ gunlukData[yeniPlakalar[np]] = afterTotals[np]; });
+        gunlukData.toplamBakiye = grandDebtTotal; // plakasi olmayan cariler dahil genel toplam
         await setDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, todayStr), gunlukData, { merge: true });
       } catch (e) { console.error("[cariTakip] gunluk bakiye yazilamadi:", e); }
     }
@@ -1749,7 +1776,7 @@ async function handleExcelUpload(file){
     var summary = "";
     summary += '<div class="line"><span>Islenen cari</span><b>' + count + '</b></div>';
     summary += '<div class="line"><span>Pasife alinan (Excelde artik yok)</span><b>' + toDeactivate.length + '</b></div>';
-    if (notesClearedCount > 0) summary += '<div class="line"><span>Yeni tahsilat nedeniyle temizlenen gecici not</span><b>' + notesClearedCount + '</b></div>';
+    if (notesClearedCount > 0) summary += '<div class="line"><span>Yeni tahsilat nedeniyle temizlenen not/tarih</span><b>' + notesClearedCount + '</b></div>';
     if (eklenecekler.length > 0) summary += '<div class="line"><span>Yeni eklenen plaka</span><b>' + eklenecekler.length + '</b></div>';
     if (topPlaka && topCollected > 0) summary += '<div class="line"><span>Bu yuklemede en cok azalan bakiye</span><b>' + escapeHtml(topPlaka) + ': ' + fmtMoney(topCollected) + '</b></div>';
     finishUploadModal(true, summary);
