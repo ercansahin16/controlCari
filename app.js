@@ -777,7 +777,7 @@ function render(){
       var debtClass = (c.debt || 0) === 0 ? " zero" : "";
       html += '<div class="row' + cls + '" data-id="' + escapeAttr(c.id) + '">';
       html += '  <div class="left">';
-      html += '    <div class="name">' + escapeHtml(c.name) + '</div>';
+      html += '    <div class="name">' + escapeHtml(c.name) + (c.kod ? ' <span class="kodtag">(' + escapeHtml(c.kod) + ')</span>' : '') + '</div>';
       html += '    <div class="tags">';
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
       html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
