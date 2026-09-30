@@ -346,18 +346,28 @@ async function openBasariPanel(){
   var body = document.getElementById("basariBody");
   body.innerHTML = '<div class="empty">Hesaplaniyor...</div>';
   try {
-    var snap = await getDocs(collection(db, GUNLUK_BAKIYE_COLLECTION));
-    var days = [];
-    snap.forEach(function(d){ days.push({ date: d.id, data: d.data() || {} }); });
-    days.sort(function(a, b){ return b.date.localeCompare(a.date); }); // en yeni once
+    // Gerçek takvim gününe göre çalışır: "dün" her zaman gerçek dünün tarihidir,
+    // "bugün" gerçek bugünün tarihidir -- kaç Excel yüklendiğinden (1 de olsa 10 da olsa)
+    // etkilenmez, çünkü her takvim günü tek bir kayıtta (o günün EN SON durumu) tutulur.
+    var todayDate = new Date();
+    var yesterdayDate = new Date(todayDate); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    var todayStr = dateStr(todayDate);
+    var yesterdayStr = dateStr(yesterdayDate);
 
-    if (days.length < 2){
-      body.innerHTML = '<div class="empty">Karsilastirma icin en az iki farkli Excel yuklemesi (farkli gunlerde) gerekiyor.</div>';
+    var todaySnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, todayStr));
+    var yestSnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, yesterdayStr));
+
+    if (!yestSnap.exists()){
+      body.innerHTML = '<div class="empty">Dun (' + fmtDateISOtoTR(yesterdayStr) + ') icin Excel yuklemesi yapilmamis, karsilastirma yapilamiyor.</div>';
       return;
     }
-    var afterDay = days[0];  // en son yukleme
-    var beforeDay = days[1]; // ondan onceki en son yukleme (gun atlansa bile dogru calisir)
-    var yData = afterDay.data, bData = beforeDay.data;
+    if (!todaySnap.exists()){
+      body.innerHTML = '<div class="empty">Bugun (' + fmtDateISOtoTR(todayStr) + ') icin henuz Excel yuklenmedi.</div>';
+      return;
+    }
+
+    var yData = todaySnap.data() || {};
+    var bData = yestSnap.data() || {};
     var topPlaka = null, topCollected = -Infinity;
     Object.keys(yData).forEach(function(plaka){
       if (plaka === "toplamBakiye") return;
@@ -366,7 +376,7 @@ async function openBasariPanel(){
       var collected = before - after;
       if (collected > topCollected){ topCollected = collected; topPlaka = plaka; }
     });
-    var rangeLabel = fmtDateISOtoTR(beforeDay.date) + " - " + fmtDateISOtoTR(afterDay.date);
+    var rangeLabel = fmtDateISOtoTR(yesterdayStr) + " - " + fmtDateISOtoTR(todayStr);
 
     var toplamTahsilat = null;
     if (yData.hasOwnProperty("toplamBakiye") && bData.hasOwnProperty("toplamBakiye")){
