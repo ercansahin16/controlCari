@@ -45,11 +45,9 @@ async function setupPushNotifications(){
   }
 }
 
-// ---- Yonetici PIN'i ----
 // ---- Sifreler ----
-// Yonetici hesaplari artik isim+kendi sifreleriyle (yoneticiler koleksiyonu).
-// Plasiyer sifresi hala tek/ortak (config/sifreler.salesPin).
-var currentSalesPin = "5678"; // Firestore yuklenene kadar varsayilan
+// Yonetici hesaplari isim+kendi sifreleriyle (yoneticiler koleksiyonu).
+// Plasiyer girisinde sifre yok: plaka secilince direkt giris yapilir.
 
 const UNLOCK_KEY = "cariTakip_unlocked_v5";
 const ROLE_KEY = "cariTakip_role_v5";
@@ -62,7 +60,6 @@ const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
-const SIFRELER_DOC = { col: "config", id: "sifreler" };
 const YONETICILER_COLLECTION = "yoneticiler";
 const SUPER_ADMIN_ID = "ercan-sahin";
 const ADMIN_DOC_ID_KEY = "cariTakip_adminDocId_v5";
@@ -83,7 +80,6 @@ var plakaDocRef = null;
 var metaDocRef = null;
 var soforDocRef = null;
 var ayarlarDocRef = null;
-var sifrelerDocRef = null;
 
 var cariler = [];
 var plakaListesi = [];
@@ -273,16 +269,6 @@ function watchAyarlar(){
       render();
     }, function(err){ console.error("[cariTakip] ayarlar dinlenemedi:", err); });
   } catch (e) { console.error("[cariTakip] ayarlar baglanamadi:", e); }
-}
-
-function watchSifreler(){
-  try {
-    sifrelerDocRef = doc(db, SIFRELER_DOC.col, SIFRELER_DOC.id);
-    onSnapshot(sifrelerDocRef, function(snap){
-      var data = snap.exists() ? snap.data() : {};
-      currentSalesPin = data.salesPin || "5678";
-    }, function(err){ console.error("[cariTakip] sifreler dinlenemedi:", err); });
-  } catch (e) { console.error("[cariTakip] sifreler baglanamadi:", e); }
 }
 
 function watchYoneticiler(){
@@ -1874,20 +1860,6 @@ function wireHamburger(){
     }
   });
 
-  on("menuPlasiyerSifresi", "click", async function(e){
-    e.preventDefault(); menu.classList.add("hidden");
-    if (currentRole !== "admin"){ await customAlert("Bu islem sadece yoneticiler icindir.", "Yetki Yok"); return; }
-    var yeni = await customPrompt("Plasiyer giris sifresini girin (1-16 karakter):", "Plasiyer Sifresini Degistir", currentSalesPin);
-    if (yeni === null) return;
-    if (!yeni || yeni.length > 16){ await customAlert("Sifre 1-16 karakter arasinda olmalidir.", "Uyari"); return; }
-    try {
-      await setDoc(sifrelerDocRef, { salesPin: yeni }, { merge: true });
-      await customAlert("Plasiyer sifresi guncellendi: " + yeni, "Basarili");
-    } catch (err) {
-      await customAlert("Guncellenemedi: " + err.message, "Hata");
-    }
-  });
-
   on("menuKullaniciTanimlama", "click", async function(e){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ await customAlert("Bu islem sadece yoneticiler icindir.", "Yetki Yok"); return; }
@@ -2050,7 +2022,6 @@ function applyMenuVisibility(){
   var mt = document.getElementById("menuTrend");
   var ma = document.getElementById("menuAltLimit");
   var msf = document.getElementById("menuSifremDegistir");
-  var mps = document.getElementById("menuPlasiyerSifresi");
   var mkt = document.getElementById("menuKullaniciTanimlama");
   var mpc = document.getElementById("menuPasifCariler");
   var mdy = document.getElementById("menuDuyuru");
@@ -2061,7 +2032,6 @@ function applyMenuVisibility(){
     if (mt) mt.classList.remove("hidden");
     if (ma) ma.classList.remove("hidden");
     if (msf) msf.classList.remove("hidden");
-    if (mps) mps.classList.remove("hidden");
     if (mkt) mkt.classList.remove("hidden");
     if (mpc) mpc.classList.remove("hidden");
     if (mdy) mdy.classList.remove("hidden");
@@ -2073,7 +2043,6 @@ function applyMenuVisibility(){
     if (mt) mt.classList.add("hidden");
     if (ma) ma.classList.add("hidden");
     if (msf) msf.classList.add("hidden");
-    if (mps) mps.classList.add("hidden");
     if (mkt) mkt.classList.add("hidden");
     if (mpc) mpc.classList.add("hidden");
     if (mdy) mdy.classList.add("hidden");
@@ -2229,9 +2198,6 @@ function showSalesForm(){
   document.getElementById("salesForm").classList.remove("hidden");
   document.getElementById("adminForm").classList.add("hidden");
   document.getElementById("pinError").textContent = "";
-  document.getElementById("salesPinInput").classList.add("hidden");
-  document.getElementById("salesSubmitBtn").classList.add("hidden");
-  document.getElementById("salesPinInput").value = "";
   document.getElementById("salesPlakaSelect").value = "";
   populateSalesDropdown();
 }
@@ -2267,9 +2233,7 @@ function trySalesLogin(plaka){
 function submitSalesLogin(){
   var err = document.getElementById("pinError");
   var plaka = document.getElementById("salesPlakaSelect").value;
-  var pin = document.getElementById("salesPinInput").value;
   if (!plaka){ err.textContent = "Lutfen plaka secin."; return; }
-  if (pin !== currentSalesPin){ err.textContent = "Yanlis PIN."; document.getElementById("salesPinInput").value = ""; return; }
   trySalesLogin(plaka);
 }
 
@@ -2297,18 +2261,8 @@ function wireLoginScreen(){
   on("adminBack", "click", function(e){ e.preventDefault(); showRoleChoice(); });
   on("salesPlakaSelect", "change", function(){
     document.getElementById("pinError").textContent = "";
-    if (this.value){
-      document.getElementById("salesPinInput").classList.remove("hidden");
-      document.getElementById("salesSubmitBtn").classList.remove("hidden");
-      document.getElementById("salesPinInput").value = "";
-      document.getElementById("salesPinInput").focus();
-    } else {
-      document.getElementById("salesPinInput").classList.add("hidden");
-      document.getElementById("salesSubmitBtn").classList.add("hidden");
-    }
+    if (this.value) submitSalesLogin();
   });
-  on("salesSubmitBtn", "click", submitSalesLogin);
-  on("salesPinInput", "keydown", function(e){ if (e.key === "Enter") submitSalesLogin(); });
   on("adminSubmit", "click", tryAdminLogin);
   on("adminPinInput", "keydown", function(e){ if (e.key === "Enter") tryAdminLogin(); });
 }
@@ -2319,7 +2273,6 @@ watchPlakaConfig();
 watchMeta();
 watchSofor();
 watchAyarlar();
-watchSifreler();
 watchYoneticiler();
 
 var alreadyUnlocked = false, savedRole = "", savedUserName = "", savedPlaka = "";
