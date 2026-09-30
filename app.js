@@ -862,7 +862,7 @@ function renderCalendar(){
   var daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
   var today = new Date();
   var todayISO = isoFor(today.getFullYear(), today.getMonth(), today.getDate());
-  for (var i = 0; i < startWeekday; i++){ var e = document.createElement("div"); e.className = "empty"; grid.appendChild(e); }
+  for (var i = 0; i < startWeekday; i++){ var e = document.createElement("div"); e.className = "cal-blank"; grid.appendChild(e); }
   for (var d = 1; d <= daysInMonth; d++){
     var cell = document.createElement("div");
     cell.textContent = d;
