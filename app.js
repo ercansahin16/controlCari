@@ -65,6 +65,7 @@ const SUPER_ADMIN_ID = "ercan-sahin";
 const ADMIN_DOC_ID_KEY = "cariTakip_adminDocId_v5";
 const BASARI_DOC = { col: "config", id: "gunluk_basari" }; // artik kullanilmiyor (gecmis uyumluluk icin birakildi)
 const GUNLUK_BAKIYE_COLLECTION = "gunluk_bakiye"; // her takvim gunu icin plaka -> toplam bakiye
+const GUNLUK_CARI_BAKIYE_COLLECTION = "gunluk_cari_bakiye"; // her takvim gunu icin cariId -> {n,d,k,p} (Toplanan Tahsilat raporu icin)
 const PLAKA_YOK = "PLAKA_YOK";
 
 // Excelde bulunmasi zorunlu (sadece bunlar) kolonlar
@@ -1575,6 +1576,91 @@ function wireTrendPanel(){
   on("trendGosterBtn", "click", loadAndRenderTrend);
 }
 
+// ---------- Toplanan Tahsilat (cari bazinda, gun bazinda) ----------
+
+async function loadToplananTahsilat(dateISO){
+  var body = document.getElementById("toplananTahsilatBody");
+  body.innerHTML = '<div class="empty">Hesaplaniyor...</div>';
+  try {
+    var curDate = new Date(dateISO + "T00:00:00");
+    var prevDate = new Date(curDate); prevDate.setDate(prevDate.getDate() - 1);
+    var prevISO = dateStr(prevDate);
+
+    var curSnap = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, dateISO));
+    var prevSnap = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, prevISO));
+
+    if (!curSnap.exists()){
+      body.innerHTML = '<div class="empty">' + escapeHtml(fmtDateISOtoTR(dateISO)) + ' icin Excel yuklemesi yok.</div>';
+      return;
+    }
+    if (!prevSnap.exists()){
+      body.innerHTML = '<div class="empty">Bir onceki gun (' + escapeHtml(fmtDateISOtoTR(prevISO)) + ') icin veri yok, karsilastirma yapilamiyor.</div>';
+      return;
+    }
+
+    var curData = curSnap.data() || {};
+    var prevData = prevSnap.data() || {};
+    var rows = [];
+    Object.keys(curData).forEach(function(id){
+      var c = curData[id], p = prevData[id];
+      if (!p) return; // o gun ilk kez goruldu, once/sonra kiyasi yok
+      var collected = (p.d || 0) - (c.d || 0);
+      if (collected > 0) rows.push({ name: c.n || id, kod: c.k || "", plaka: c.p || "", amount: collected });
+    });
+    rows.sort(function(a, b){ return b.amount - a.amount; });
+
+    if (rows.length === 0){
+      body.innerHTML = '<div class="empty">' + escapeHtml(fmtDateISOtoTR(prevISO)) + ' -> ' + escapeHtml(fmtDateISOtoTR(dateISO)) + ' arasinda hicbir caride tahsilat olmamis.</div>';
+      return;
+    }
+
+    var total = rows.reduce(function(s, r){ return s + r.amount; }, 0);
+    var html = '<div class="tahsilat-total">' + escapeHtml(fmtDateISOtoTR(prevISO)) + ' &rarr; ' + escapeHtml(fmtDateISOtoTR(dateISO)) + '<span>' + fmtMoney(total) + '</span></div>';
+    rows.forEach(function(r){
+      html += '<div class="tahsilat-item">';
+      html += '  <div style="min-width:0;">';
+      html += '    <div class="tname">' + escapeHtml(r.name) + (r.kod ? ' <span style="font-weight:400;color:var(--muted);">(' + escapeHtml(r.kod) + ')</span>' : '') + '</div>';
+      if (r.plaka) html += '    <div class="tmeta">' + escapeHtml(r.plaka) + (soforAdi(r.plaka) ? " - " + escapeHtml(soforAdi(r.plaka)) : "") + '</div>';
+      html += '  </div>';
+      html += '  <div class="tamount">' + fmtMoney(r.amount) + '</div>';
+      html += '</div>';
+    });
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<div class="empty">Hata: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function openToplananTahsilatPanel(){
+  document.getElementById("toplananTahsilatOverlay").classList.add("show");
+  document.getElementById("ttTabBugun").classList.add("active");
+  document.getElementById("ttTabTarihSec").classList.remove("active");
+  document.getElementById("ttDateRow").classList.remove("show");
+  loadToplananTahsilat(dateStr(new Date()));
+}
+
+function wireToplananTahsilatPanel(){
+  on("closeToplananTahsilatBtn", "click", function(){ document.getElementById("toplananTahsilatOverlay").classList.remove("show"); });
+  on("toplananTahsilatOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
+  on("ttTabBugun", "click", function(){
+    this.classList.add("active");
+    document.getElementById("ttTabTarihSec").classList.remove("active");
+    document.getElementById("ttDateRow").classList.remove("show");
+    loadToplananTahsilat(dateStr(new Date()));
+  });
+  on("ttTabTarihSec", "click", function(){
+    this.classList.add("active");
+    document.getElementById("ttTabBugun").classList.remove("active");
+    document.getElementById("ttDateRow").classList.add("show");
+    var input = document.getElementById("ttDateInput");
+    if (!input.value) input.value = dateStr(new Date());
+    loadToplananTahsilat(input.value);
+  });
+  on("ttDateInput", "change", function(){
+    if (this.value) loadToplananTahsilat(this.value);
+  });
+}
+
 // ---------- Excel yukleme (sadece yonetici) ----------
 
 function requiredColumnsText(){
@@ -1683,6 +1769,7 @@ async function handleExcelUpload(file){
     var newIds = {};
     var notesClearedCount = 0;
     var grandDebtTotal = 0; // plakasi olsun olmasin TUM carilerin toplam bakiyesi (gunluk toplam tahsilat icin)
+    var cariSnapshotToday = {}; // cariId -> {n,d,k,p} ("Toplanan Tahsilat" raporu icin, cari bazinda gunluk bakiye)
 
     var oldById = {};
     cariSnapshotAtStart.forEach(function(c){ oldById[c.id] = c; });
@@ -1727,6 +1814,7 @@ async function handleExcelUpload(file){
       }
 
       await setDoc(doc(db, CARI_COLLECTION, id), updateData, { merge: true });
+      cariSnapshotToday[id] = { n: nm, d: debt, k: kod, p: plaka };
 
       if (plaka){
         var npNew = normalizePlate(plaka);
@@ -1771,6 +1859,11 @@ async function handleExcelUpload(file){
         gunlukData.toplamBakiye = grandDebtTotal; // plakasi olmayan cariler dahil genel toplam
         await setDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, todayStr), gunlukData, { merge: true });
       } catch (e) { console.error("[cariTakip] gunluk bakiye yazilamadi:", e); }
+      try {
+        // "Toplanan Tahsilat" raporu icin cari bazinda gunluk bakiye kaydi (ayni gun icinde
+        // birden fazla yukleme olursa, gunun EN SON durumu esas alinir, birikmez).
+        await setDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, dateStr(new Date())), cariSnapshotToday, { merge: true });
+      } catch (e) { console.error("[cariTakip] gunluk cari bakiye yazilamadi:", e); }
     }
 
     if (metaDocRef){
@@ -1856,6 +1949,12 @@ function wireHamburger(){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ await customAlert("Tahsilat trendi sadece yoneticiler icindir.", "Yetki Yok"); return; }
     openTrendPanel();
+  });
+
+  on("menuToplananTahsilat", "click", async function(e){
+    e.preventDefault(); menu.classList.add("hidden");
+    if (currentRole !== "admin"){ await customAlert("Toplanan tahsilat sadece yoneticiler icindir.", "Yetki Yok"); return; }
+    openToplananTahsilatPanel();
   });
 
   on("menuPlakaDegistir", "click", function(e){
@@ -2038,6 +2137,7 @@ function applyMenuVisibility(){
   var ms = document.getElementById("menuSoforTanimlama");
   var md = document.getElementById("menuPlakaDegistir");
   var mt = document.getElementById("menuTrend");
+  var mtt = document.getElementById("menuToplananTahsilat");
   var ma = document.getElementById("menuAltLimit");
   var msf = document.getElementById("menuSifremDegistir");
   var mkt = document.getElementById("menuKullaniciTanimlama");
@@ -2048,6 +2148,7 @@ function applyMenuVisibility(){
     if (mg) mg.classList.remove("hidden");
     if (ms) ms.classList.remove("hidden");
     if (mt) mt.classList.remove("hidden");
+    if (mtt) mtt.classList.remove("hidden");
     if (ma) ma.classList.remove("hidden");
     if (msf) msf.classList.remove("hidden");
     if (mkt) mkt.classList.remove("hidden");
@@ -2059,6 +2160,7 @@ function applyMenuVisibility(){
     if (mg) mg.classList.add("hidden");
     if (ms) ms.classList.add("hidden");
     if (mt) mt.classList.add("hidden");
+    if (mtt) mtt.classList.add("hidden");
     if (ma) ma.classList.add("hidden");
     if (msf) msf.classList.add("hidden");
     if (mkt) mkt.classList.add("hidden");
@@ -2150,6 +2252,7 @@ function wireEvents(){
   wireTahsilatPanel();
   wireOdemeBekleyenPanel();
   wireTrendPanel();
+  wireToplananTahsilatPanel();
 }
 
 function logout(){
