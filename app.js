@@ -782,6 +782,7 @@ function render(){
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
       html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
       if (c.sonTahTarihi) html += '<span class="tag">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + '</span>';
+      if (c.due) html += '<span class="tag due-chip">Bekleniyor: ' + escapeHtml(fmtDateISOtoTR(c.due)) + '</span>';
       html += '    </div>';
       if (c.sabitNot) html += '    <div class="sabitnot-preview">📌 ' + escapeHtml(c.sabitNot) + '</div>';
       if (c.note) html += '    <div class="note-preview">' + escapeHtml(c.note) + '</div>';

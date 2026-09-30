@@ -89,6 +89,7 @@
   .row .name .kodtag{ font-size:10px; font-weight:400; color:var(--muted); }
   .row .tags{ margin-top:2px; }
   .row .tag{ display:inline-block; font-size:9px; color:var(--muted); background:var(--card2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; margin-right:4px; }
+  .row .tag.due-chip{ display:none; } /* sadece web (900px+) gorunumunde chip olarak gosterilir, mobilde alt satirdaki turuncu yazi kullanilir */
   .row .note-preview{ font-size:10.5px; color:var(--danger); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .sabitnot-preview{ font-size:10.5px; color:var(--accent); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .row .due{ font-size:10px; color:var(--warn); margin-top:2px; }
@@ -310,6 +311,8 @@
     .row:hover{ border-color: var(--accent); transform: translateY(-2px); cursor: pointer; }
     .row .name{ font-size: 14px; }
     .row .debt{ font-size: 15px; }
+    .row .tag.due-chip{ display:inline-block; color:var(--warn); border-color:var(--warn); }
+    .row .due{ display:none; } /* masaustunde ayni bilgi chip olarak gosteriliyor, tekrar satiri gizlenir */
     .empty{ grid-column: 1 / -1; }
 
     /* Modallari asagidan acilan sheet yerine ortalanmis dialog gibi goster */
