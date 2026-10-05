@@ -2071,7 +2071,8 @@ function wireHamburger(){
         sentBy: editorLabel(), sentAt: serverTimestamp()
       });
       status.textContent = "Gonderildi.";
-      setTimeout(function(){ document.getElementById("duyuruOverlay").classList.remove("show"); }, 500);
+      await customAlert("Duyurunuz gonderildi. Uygulamayi acan tum kullanicilara ekranda gosterilecek.", "Duyuru Gonderildi");
+      document.getElementById("duyuruOverlay").classList.remove("show");
     } catch (e) {
       status.textContent = "Gonderilemedi: " + e.message;
     }
@@ -2291,6 +2292,57 @@ function applyRoleUI(){
   updateMinBakiyeLabel();
 }
 
+// ---------- Duyurular (uygulama ici gosterim) ----------
+// Duyuru gonderilince "duyurular" koleksiyonuna kayit atilir. Uygulamasi acik olan
+// (veya sonradan acan) herkese bu kayit ekranda gosterilir. Uygulama tamamen kapaliyken
+// telefon bildirimi icin sunucu tarafi (Cloud Function) gerekir, o ayri bir kurulum.
+const DUYURU_SEEN_KEY = "cariTakip_lastDuyuru_v1";
+var unsubDuyuru = null;
+var duyuruQueue = [];
+var duyuruShowing = false;
+
+async function drainDuyuruQueue(){
+  if (duyuruShowing) return;
+  duyuruShowing = true;
+  while (duyuruQueue.length){
+    var d = duyuruQueue.shift();
+    try {
+      if ("Notification" in window && Notification.permission === "granted" && document.hidden){
+        try { new Notification(d.title, { body: d.message, icon: "icons/icon-192.png" }); } catch (e) {}
+      }
+    } catch (e) {}
+    await customAlert(d.message + (d.sentBy ? "\n\n— " + d.sentBy : ""), "📢 " + d.title);
+  }
+  duyuruShowing = false;
+}
+
+function watchDuyurular(){
+  if (unsubDuyuru) { unsubDuyuru(); unsubDuyuru = null; }
+  var lastSeen = 0;
+  try { lastSeen = parseInt(localStorage.getItem(DUYURU_SEEN_KEY) || "0", 10) || 0; } catch (e) {}
+  var cutoff = Date.now() - 48 * 60 * 60 * 1000; // 48 saatten eski duyurular gosterilmez
+  try {
+    var q = query(collection(db, "duyurular"), orderBy("sentAt", "desc"), limit(5));
+    unsubDuyuru = onSnapshot(q, function(snap){
+      var fresh = [];
+      snap.forEach(function(ds){
+        var d = ds.data() || {};
+        if (!d.sentAt || !d.sentAt.toMillis) return; // sunucu zamani henuz yazilmadi
+        var ms = d.sentAt.toMillis();
+        if (ms <= lastSeen || ms < cutoff) return;
+        fresh.push({ ms: ms, title: d.title || "Duyuru", message: d.message || "", sentBy: d.sentBy || "" });
+      });
+      if (fresh.length === 0) return;
+      fresh.sort(function(a, b){ return a.ms - b.ms; });
+      lastSeen = fresh[fresh.length - 1].ms;
+      try { localStorage.setItem(DUYURU_SEEN_KEY, String(lastSeen)); } catch (e) {}
+      var me = editorLabel();
+      fresh.forEach(function(d){ if (d.sentBy !== me) duyuruQueue.push(d); }); // gonderen kendi duyurusunu tekrar gormesin
+      drainDuyuruQueue();
+    }, function(err){ console.error("[cariTakip] duyurular dinlenemedi:", err); });
+  } catch (e) { console.error("[cariTakip] duyurular baglanamadi:", e); }
+}
+
 function unlockApp(){
   console.log("[cariTakip] Kilit aciliyor. Rol:", currentRole, "Kullanici:", currentUserName, "Plaka:", currentPlakalar);
   document.getElementById("lockScreen").classList.add("hidden");
@@ -2305,6 +2357,7 @@ function unlockApp(){
   if (nightLockInterval) clearInterval(nightLockInterval);
   nightLockInterval = setInterval(checkNightLock, 60 * 1000);
   setupPushNotifications();
+  watchDuyurular();
 }
 
 // ---------- Giris ekrani ----------
