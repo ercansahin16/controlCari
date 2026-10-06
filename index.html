@@ -67,7 +67,17 @@
   input[type=file]{ display:none; }
   .required-cols{ font-size:9px; color:var(--muted); margin-top:5px; line-height:1.4; }
   .search{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:7px 9px; color:var(--text); font-size:12px; }
-  .search-wrap{ display:flex; gap:6px; margin-top:8px; }
+  .search-wrap{ display:flex; gap:6px; margin-top:8px; position:relative; }
+  .search-dropdown{ display:none; position:absolute; top:100%; left:0; right:0; min-width:260px; margin-top:4px; max-height:55vh; overflow-y:auto; background:var(--card); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.45); z-index:60; }
+  .search-dropdown.show{ display:block; }
+  .sd-item{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 11px; border-bottom:1px solid var(--border); cursor:pointer; font-size:12.5px; }
+  .sd-item:last-child{ border-bottom:0; }
+  .sd-item:hover{ background:var(--card2); }
+  .sd-item.low .sd-name{ opacity:.8; }
+  .sd-name{ min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .sd-low{ font-size:10px; color:var(--muted, #8a8f9a); border:1px solid var(--border); border-radius:6px; padding:1px 5px; margin-left:4px; white-space:nowrap; }
+  .sd-debt{ font-weight:700; white-space:nowrap; }
+  .sd-empty{ padding:10px 11px; font-size:12px; color:var(--muted, #8a8f9a); }
   .search-wrap .search{ flex:1; }
   .search-clear-btn{ display:none; background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:0 12px; font-size:11.5px; cursor:pointer; white-space:nowrap; }
   .search-clear-btn.show{ display:block; }
@@ -410,7 +420,8 @@
     </div>
     <div class="required-cols" id="requiredCols"></div>
     <div class="search-wrap">
-      <input class="search" id="searchBox" placeholder="Cari ara..." />
+      <input class="search" id="searchBox" placeholder="Cari ara..." autocomplete="off" />
+      <div class="search-dropdown" id="searchDropdown"></div>
       <button type="button" class="search-clear-btn" id="searchClearBtn">Temizle</button>
     </div>
     <div class="filter-row hidden" id="adminFilterRow">
@@ -461,6 +472,7 @@
       <div class="sub" id="detailMeta">-</div>
     </div>
     <div class="sheet-body">
+      <div class="sub hidden" id="detailReadonlyInfo" style="margin-bottom:8px;">Bu bilgiler yonetici tarafindan girilir, plasiyer degistiremez. Sadece "Odeme Alindi" bildirimi yapabilirsiniz.</div>
       <div class="field">
         <label>Kalan Bakiye</label>
         <input type="text" inputmode="decimal" id="debtInput" />
@@ -563,8 +575,9 @@
 
 <div class="overlay" id="historyOverlay">
   <div class="sheet">
-    <div class="sheet-head"><h2>Gecmis Kayitlar</h2><div class="sub">Son 200 duzenleme</div></div>
+    <div class="sheet-head"><h2>Gecmis Kayitlar</h2><div class="sub">Son 500 duzenleme - kullaniciya gore filtreleyebilirsiniz</div></div>
     <div class="sheet-body">
+      <select class="search" id="historyUser" style="margin:0 0 8px 0;"><option value="">Tum kullanicilar</option></select>
       <input class="search" id="historySearch" placeholder="Cari adina gore ara..." style="margin:0 0 8px 0;" />
       <div id="historyList"></div>
     </div>

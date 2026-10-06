@@ -258,10 +258,7 @@ function watchSofor(){
 function updateMinBakiyeLabel(){
   var el = document.getElementById("minBakiyeLabel");
   if (!el) return;
-  // Alt limit sadece yonetici tarafinda gecerli -- plasiyer tum carilerini gorur.
-  el.textContent = (currentRole === "admin")
-    ? "Alt limit: " + fmtMoney(minBakiye) + " (bu tutarin altindaki bakiyeler gizleniyor)"
-    : "";
+  el.textContent = "Alt limit: " + fmtMoney(minBakiye) + " (bu tutarin altindaki bakiyeler listede gizli, aramada gorunur)";
 }
 
 function watchAyarlar(){
@@ -632,15 +629,29 @@ function wireNightBypass(){
 
 // ---------- Rol bazli gorunur liste ----------
 
+function passesMinLimit(c){ var d = c.debt || 0; return d < 0 || d >= minBakiye; }
+
+// Arama kutusunun acilir listesi icin havuz: alt limitin altindakiler dahil tum aktif
+// cariler. Plasiyerde sadece kendi plakasi, yoneticide plaka/bolge filtresinden bagimsiz hepsi.
+function getSearchPool(){
+  var active = cariler.filter(function(c){ return c.aktif; });
+  if (currentRole === "sales"){
+    var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
+    active = active.filter(function(c){
+      if (wantYok) return !c.plaka;
+      if (!c.plaka) return false;
+      return currentPlakalar.indexOf(normalizePlate(c.plaka)) !== -1;
+    });
+  }
+  return active;
+}
+
 function getVisibleCariler(){
   var active = cariler.filter(function(c){ return c.aktif; });
-  // Alt limit SADECE yonetici tarafinda uygulanir. Plasiyer kendi plakasina
-  // atanmis TUM carileri gormeli, bakiye tutari ne olursa olsun.
-  if (currentRole === "admin"){
-    // Alacakli (eksi bakiyeli) cariler alt limitten bagimsiz her zaman gosterilir --
-    // alt limit sadece kucuk, unemli olmayan POZITIF bakiyeleri gizlemek icindir.
-    active = active.filter(function(c){ var d = c.debt || 0; return d < 0 || d >= minBakiye; });
-  }
+  // Alt limit hem yonetici hem plasiyer listesinde uygulanir. Alacakli (eksi
+  // bakiyeli) cariler alt limitten bagimsiz her zaman gosterilir. Limit altindaki
+  // cariler listeden gizlenir ama arama kutusunun acilir listesinde yine bulunur.
+  active = active.filter(function(c){ return passesMinLimit(c); });
   var base = active;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
@@ -740,6 +751,48 @@ function renderDueAlertList(){
       }, 60);
     });
   });
+}
+
+// ---------- Arama kutusu acilir listesi (alt limit altindakiler dahil, bakiye ile) ----------
+
+function hideSearchDropdown(){
+  var dd = document.getElementById("searchDropdown");
+  if (dd) dd.classList.remove("show");
+}
+function refreshSearchDropdown(){
+  var dd = document.getElementById("searchDropdown");
+  var box = document.getElementById("searchBox");
+  if (!dd || !box) return;
+  var q = box.value.toLocaleLowerCase("tr").trim();
+  if (!q){ dd.classList.remove("show"); dd.innerHTML = ""; return; }
+  var matches = getSearchPool().filter(function(c){ return c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
+  matches.sort(function(a, b){ return a.name.localeCompare(b.name, "tr"); });
+  var total = matches.length;
+  matches = matches.slice(0, 40);
+  if (total === 0){
+    dd.innerHTML = '<div class="sd-empty">Eslesen cari yok</div>';
+    dd.classList.add("show");
+    return;
+  }
+  var html = "";
+  matches.forEach(function(c){
+    var low = !passesMinLimit(c);
+    html += '<div class="sd-item' + (low ? " low" : "") + '" data-id="' + escapeAttr(c.id) + '">';
+    html += '  <div class="sd-name">' + escapeHtml(c.name) + (c.kod ? ' <span class="kodtag">(' + escapeHtml(c.kod) + ')</span>' : '') + (low ? ' <span class="sd-low">alt limit alti</span>' : '') + '</div>';
+    html += '  <div class="sd-debt">' + fmtMoney(c.debt) + '</div>';
+    html += '</div>';
+  });
+  if (total > matches.length) html += '<div class="sd-empty">+' + (total - matches.length) + ' cari daha, aramayi daraltin</div>';
+  dd.innerHTML = html;
+  dd.querySelectorAll(".sd-item").forEach(function(el){
+    // mousedown: input blur olmadan once yakalansin
+    el.addEventListener("mousedown", function(e){ e.preventDefault(); });
+    el.addEventListener("click", function(){
+      hideSearchDropdown();
+      openDetail(el.getAttribute("data-id"));
+    });
+  });
+  dd.classList.add("show");
 }
 
 var activeQuickFilter = null; // null | "flagged" | "noted" | "duetoday" | "overdue"
@@ -895,6 +948,7 @@ function closeCalendar(){ document.getElementById("calendarPopup").classList.rem
 function wireCalendar(){
   on("dueFieldBtn", "click", function(e){
     e.stopPropagation();
+    if (currentRole !== "admin") return;
     var popup = document.getElementById("calendarPopup");
     if (popup.classList.contains("show")) closeCalendar(); else openCalendar();
   });
@@ -968,8 +1022,27 @@ function openDetail(id){
   document.getElementById("paidAmountInput").value = c.paymentAmount ? fmtMoney(c.paymentAmount) : "";
   document.getElementById("paidAmountRow").classList.toggle("show", !!c.paymentReported);
 
+  applyDetailPermissions();
   document.getElementById("saveStatus").textContent = "";
   document.getElementById("overlay").classList.add("show");
+}
+
+// Plasiyer; yoneticinin girdigi not, tarih, sorunlu isareti ve bakiyeyi DEGISTIREMEZ.
+// Sadece "Odeme Alindi" bildirimi yapabilir (yonetici onaylar/reddeder).
+function applyDetailPermissions(){
+  var ro = (currentRole !== "admin");
+  ["debtInput", "sabitNotInput", "noteInput"].forEach(function(id){
+    var el = document.getElementById(id);
+    el.readOnly = ro;
+    el.style.opacity = ro ? "0.75" : "";
+  });
+  ["flagSwitch", "dueFieldBtn"].forEach(function(id){
+    var el = document.getElementById(id);
+    el.style.pointerEvents = ro ? "none" : "";
+    el.style.opacity = ro ? "0.55" : "";
+  });
+  var info = document.getElementById("detailReadonlyInfo");
+  if (info) info.classList.toggle("hidden", !ro);
 }
 function closeDetail(){
   closeCalendar();
@@ -1040,6 +1113,7 @@ async function writeHistory(c, data){
     await setDoc(histRef, {
       cariId: c.id, cariName: c.name, plaka: c.plaka || "",
       note: data.note, sabitNot: data.sabitNot || "", due: data.due, flagged: data.flagged, debt: data.debt,
+      changes: data.lastChangeDetail || "",
       paymentReported: data.paymentReported, paymentAmount: data.paymentAmount || 0,
       editedBy: data.lastEditedBy, editedAt: serverTimestamp()
     });
@@ -1091,6 +1165,14 @@ async function saveCurrentNote(){
     paymentReported: paid,
     paymentAmount: paid ? paidAmount : 0
   };
+  if (currentRole !== "admin"){
+    // Plasiyer: ekrandaki degerler ne olursa olsun yalnizca odeme bildirimi kaydedilir.
+    newValues.debt = c ? (c.debt || 0) : 0;
+    newValues.note = c ? (c.note || "") : "";
+    newValues.sabitNot = c ? (c.sabitNot || "") : "";
+    newValues.due = c ? (c.due || "") : "";
+    newValues.flagged = c ? !!c.flagged : false;
+  }
 
   var changeLines = computeChangeLines(c, newValues);
   if (changeLines.length === 0){
@@ -1232,25 +1314,45 @@ var historyEntries = [];
 function watchHistory(){
   if (unsubHistory) unsubHistory();
   try {
-    var q = query(collection(db, HISTORY_COLLECTION), orderBy("editedAt", "desc"), limit(200));
+    var q = query(collection(db, HISTORY_COLLECTION), orderBy("editedAt", "desc"), limit(500));
     unsubHistory = onSnapshot(q, function(snap){
       historyEntries = [];
       snap.forEach(function(d){
         var x = d.data();
         historyEntries.push({
           cariName: x.cariName || "", note: x.note || "", due: x.due || "",
-          debt: x.debt || 0, editedBy: x.editedBy || "", editedAtLabel: fmtTimestamp(x.editedAt)
+          debt: x.debt || 0, editedBy: x.editedBy || "", editedAtLabel: fmtTimestamp(x.editedAt),
+          changes: x.changes || ""
         });
       });
+      populateHistoryUsers();
       if (!document.getElementById("historyOverlay").classList.contains("show")) return;
       renderHistoryList();
     }, function(err){ console.error("[cariTakip] gecmis dinlenemedi:", err); });
   } catch (e) { console.error("[cariTakip] gecmis baglanamadi:", e); }
 }
 
+function populateHistoryUsers(){
+  var sel = document.getElementById("historyUser");
+  if (!sel) return;
+  var prev = sel.value;
+  var names = [];
+  historyEntries.forEach(function(h){ if (h.editedBy && names.indexOf(h.editedBy) === -1) names.push(h.editedBy); });
+  names.sort(function(a, b){ return a.localeCompare(b, "tr"); });
+  var html = '<option value="">Tum kullanicilar</option>';
+  names.forEach(function(n){ html += '<option value="' + escapeAttr(n) + '">' + escapeHtml(n) + '</option>'; });
+  sel.innerHTML = html;
+  sel.value = names.indexOf(prev) !== -1 ? prev : "";
+}
+
 function renderHistoryList(){
   var q = document.getElementById("historySearch").value.toLocaleLowerCase("tr").trim();
-  var filtered = historyEntries.filter(function(h){ return !q || h.cariName.toLocaleLowerCase("tr").indexOf(q) !== -1; });
+  var userSel = document.getElementById("historyUser");
+  var userF = userSel ? userSel.value : "";
+  var filtered = historyEntries.filter(function(h){
+    if (userF && h.editedBy !== userF) return false;
+    return !q || h.cariName.toLocaleLowerCase("tr").indexOf(q) !== -1;
+  });
   var container = document.getElementById("historyList");
   if (filtered.length === 0){
     container.innerHTML = '<div class="empty" style="padding:20px;">Kayit bulunamadi.</div>';
@@ -1262,6 +1364,7 @@ function renderHistoryList(){
     html += '<div class="history-item">';
     html += '  <div class="hname">' + escapeHtml(h.cariName) + '</div>';
     html += '  <div class="hmeta">' + escapeHtml(h.editedBy) + ' - ' + escapeHtml(h.editedAtLabel) + '</div>';
+    if (h.changes) html += '  <div class="hnote" style="white-space:pre-line;color:var(--text);">' + escapeHtml(h.changes) + '</div>';
     if (h.note) html += '  <div class="hnote">"' + escapeHtml(h.note) + '"</div>';
     if (h.due) html += '  <div class="hnote">Beklenen tarih: ' + escapeHtml(fmtDateISOtoTR(h.due)) + '</div>';
     html += '  <div class="hnote">Bakiye: ' + fmtMoney(h.debt) + '</div>';
@@ -1994,7 +2097,7 @@ function wireHamburger(){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ await customAlert("Alt limit sadece yoneticiler tarafindan degistirilebilir.", "Yetki Yok"); return; }
     var val = await customPrompt(
-      "Bu tutarin altindaki bakiyeler sadece yonetici listesinde gizlenir (plasiyer tum carilerini her zaman gorur).\nMevcut deger: " + fmtMoney(minBakiye),
+      "Bu tutarin altindaki bakiyeler yonetici ve plasiyer listesinde gizlenir (arama kutusunda yine bulunur).\nMevcut deger: " + fmtMoney(minBakiye),
       "Alt Limit Belirle", String(minBakiye)
     );
     if (val === null) return;
@@ -2092,6 +2195,7 @@ function wireHamburger(){
   on("closeHistoryBtn", "click", function(){ document.getElementById("historyOverlay").classList.remove("show"); });
   on("historyOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
   on("historySearch", "input", renderHistoryList);
+  on("historyUser", "change", renderHistoryList);
 
   on("paymentIconBtn", "click", function(){
     renderPaymentList();
@@ -2221,7 +2325,7 @@ function wireAdminFilters(){
 }
 
 function wireEvents(){
-  on("flagSwitch", "click", function(){ this.classList.toggle("on"); });
+  on("flagSwitch", "click", function(){ if (currentRole !== "admin") return; this.classList.toggle("on"); });
   on("closeBtn", "click", closeDetail);
   on("overlay", "click", function(e){ if (e.target === this) closeDetail(); });
   on("saveBtn", "click", saveCurrentNote);
@@ -2230,6 +2334,12 @@ function wireEvents(){
   on("searchBox", "input", function(){
     document.getElementById("searchClearBtn").classList.toggle("show", this.value.length > 0);
     render();
+    refreshSearchDropdown();
+  });
+  on("searchBox", "focus", refreshSearchDropdown);
+  document.addEventListener("click", function(e){
+    var wrap = document.querySelector(".search-wrap");
+    if (wrap && !wrap.contains(e.target)) hideSearchDropdown();
   });
   on("searchClearBtn", "click", function(){
     var box = document.getElementById("searchBox");
@@ -2237,6 +2347,7 @@ function wireEvents(){
     this.classList.remove("show");
     box.focus();
     render();
+    hideSearchDropdown();
   });
   on("chipFlag", "click", function(){ activeQuickFilter = activeQuickFilter === "flagged" ? null : "flagged"; render(); });
   on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
