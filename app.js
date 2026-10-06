@@ -366,19 +366,40 @@ async function openBasariPanel(){
 
     var yData = todaySnap.data() || {};
     var bData = yestSnap.data() || {};
-    var topPlaka = null, topCollected = -Infinity;
-    Object.keys(yData).forEach(function(plaka){
-      if (plaka === "toplamBakiye") return;
-      var before = bData[plaka] || 0;
-      var after = yData[plaka];
-      var collected = before - after;
-      if (collected > topCollected){ topCollected = collected; topPlaka = plaka; }
-    });
     var rangeLabel = fmtDateISOtoTR(yesterdayStr) + " - " + fmtDateISOtoTR(todayStr);
+    var topPlaka = null, topCollected = -Infinity, toplamTahsilat = null;
 
-    var toplamTahsilat = null;
-    if (yData.hasOwnProperty("toplamBakiye") && bData.hasOwnProperty("toplamBakiye")){
-      toplamTahsilat = bData.toplamBakiye - yData.toplamBakiye;
+    // Gercek tahsilat: cari bazinda sadece bakiyesi AZALANLARIN toplami. Net bakiye farki
+    // (dun toplam - bugun toplam) yeni satis/fatura eklenince eksiye dusuyordu; yanlisti.
+    var cToday = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, todayStr));
+    var cYest = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, yesterdayStr));
+    if (cToday.exists() && cYest.exists()){
+      var cd = cToday.data() || {}, pd = cYest.data() || {};
+      var perPlate = {};
+      toplamTahsilat = 0;
+      Object.keys(cd).forEach(function(id){
+        var cur = cd[id], prev = pd[id];
+        if (!prev) return;
+        var col = (prev.d || 0) - (cur.d || 0);
+        if (col <= 0) return;
+        toplamTahsilat += col;
+        var pl = cur.p || "";
+        if (pl) perPlate[pl] = (perPlate[pl] || 0) + col;
+      });
+      Object.keys(perPlate).forEach(function(pl){
+        if (perPlate[pl] > topCollected){ topCollected = perPlate[pl]; topPlaka = pl; }
+      });
+    } else {
+      // Cari bazli kayit yoksa (eski gunler) plaka bakiyelerinin net farkina dus.
+      Object.keys(yData).forEach(function(plaka){
+        if (plaka === "toplamBakiye") return;
+        var collected = (bData[plaka] || 0) - yData[plaka];
+        if (collected > topCollected){ topCollected = collected; topPlaka = plaka; }
+      });
+      if (yData.hasOwnProperty("toplamBakiye") && bData.hasOwnProperty("toplamBakiye")){
+        var net = bData.toplamBakiye - yData.toplamBakiye;
+        if (net > 0) toplamTahsilat = net;
+      }
     }
 
     if ((!topPlaka || topCollected <= 0) && (toplamTahsilat === null || toplamTahsilat <= 0)){
@@ -387,7 +408,7 @@ async function openBasariPanel(){
     }
 
     var html = '<div class="basari-box">';
-    if (toplamTahsilat !== null){
+    if (toplamTahsilat !== null && toplamTahsilat > 0){
       html += '  <div class="total-tahsilat">Toplam Tahsilat<br/><span>' + fmtMoney(toplamTahsilat) + '</span></div>';
     }
     if (topPlaka && topCollected > 0){
