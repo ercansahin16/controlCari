@@ -2223,6 +2223,26 @@ function wireHamburger(){
   on("pasifOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
   on("pasifSearch", "input", renderPasifList);
 
+  async function loadSentDuyurular(){
+    var box = document.getElementById("duyuruSentList");
+    if (!box) return;
+    box.innerHTML = '<div class="sub" style="padding:6px 0;">Yukleniyor...</div>';
+    try {
+      var snap = await getDocs(query(collection(db, "duyurular"), orderBy("sentAt", "desc"), limit(15)));
+      if (snap.empty){ box.innerHTML = '<div class="sub" style="padding:6px 0;">Henuz duyuru gonderilmemis.</div>'; return; }
+      var html = "";
+      snap.forEach(function(d){
+        var x = d.data();
+        html += '<div class="history-item">';
+        html += '  <div class="hname">' + escapeHtml(x.title || "") + '</div>';
+        html += '  <div class="hmeta">' + escapeHtml(x.sentBy || "") + ' - ' + escapeHtml(fmtTimestamp(x.sentAt)) + '</div>';
+        html += '  <div class="hnote" style="white-space:pre-line;">' + escapeHtml(x.message || "") + '</div>';
+        html += '</div>';
+      });
+      box.innerHTML = html;
+    } catch (err) { box.innerHTML = '<div class="sub" style="padding:6px 0;">Liste yuklenemedi: ' + escapeHtml(err.message) + '</div>'; }
+  }
+
   on("menuDuyuru", "click", async function(e){
     e.preventDefault(); menu.classList.add("hidden");
     if (currentRole !== "admin"){ await customAlert("Duyuru gonderme sadece yoneticiler icindir.", "Yetki Yok"); return; }
@@ -2230,6 +2250,7 @@ function wireHamburger(){
     document.getElementById("duyuruMessageInput").value = "";
     document.getElementById("duyuruStatus").textContent = "";
     document.getElementById("duyuruOverlay").classList.add("show");
+    loadSentDuyurular();
   });
   on("closeDuyuruBtn", "click", function(){ document.getElementById("duyuruOverlay").classList.remove("show"); });
   on("duyuruOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
@@ -2246,7 +2267,10 @@ function wireHamburger(){
       });
       status.textContent = "Gonderildi.";
       await customAlert("Duyurunuz gonderildi. Uygulamayi acan tum kullanicilara ekranda gosterilecek.", "Duyuru Gonderildi");
-      document.getElementById("duyuruOverlay").classList.remove("show");
+      document.getElementById("duyuruTitleInput").value = "";
+      document.getElementById("duyuruMessageInput").value = "";
+      status.textContent = "";
+      loadSentDuyurular();
     } catch (e) {
       status.textContent = "Gonderilemedi: " + e.message;
     }
