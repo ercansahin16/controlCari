@@ -2332,11 +2332,12 @@ function wireHamburger(){
         sentBy: editorLabel(), sentAt: serverTimestamp()
       });
       status.textContent = "Gonderildi.";
-      await customAlert("Duyurunuz gonderildi. Uygulamayi acan tum kullanicilara ekranda gosterilecek.", "Duyuru Gonderildi");
+      // Duyuru penceresini hemen kapat; kucuk onay penceresi ana sayfanin ustunde acilsin.
+      document.getElementById("duyuruOverlay").classList.remove("show");
       document.getElementById("duyuruTitleInput").value = "";
       document.getElementById("duyuruMessageInput").value = "";
       status.textContent = "";
-      if (!document.getElementById("duyuruSentList").classList.contains("hidden")) loadSentDuyurular();
+      await customAlert("Duyurunuz gonderildi.", "Duyuru Gonderildi");
     } catch (e) {
       status.textContent = "Gonderilemedi: " + e.message;
     }
