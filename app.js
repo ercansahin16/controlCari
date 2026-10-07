@@ -172,7 +172,16 @@ function on(id, ev, fn){
 var modalResolve = null;
 var modalType = null;
 
-function openCustomModal(type, title, message, placeholder){
+var modalCountdownTimer = null;
+var modalLocked = false;
+function stopModalCountdown(){
+  if (modalCountdownTimer){ clearInterval(modalCountdownTimer); modalCountdownTimer = null; }
+  modalLocked = false;
+  var ok = document.getElementById("customModalOkBtn");
+  if (ok){ ok.disabled = false; ok.style.opacity = ""; ok.textContent = "Tamam"; }
+}
+function openCustomModal(type, title, message, placeholder, lockSeconds){
+  stopModalCountdown();
   modalType = type;
   document.getElementById("customModalTitle").textContent = title;
   document.getElementById("customModalMessage").textContent = message;
@@ -187,13 +196,28 @@ function openCustomModal(type, title, message, placeholder){
   }
   document.getElementById("customModalCancelBtn").classList.toggle("hidden", type === "alert");
   document.getElementById("customModalOverlay").classList.add("show");
+  if (lockSeconds > 0){
+    // Okunmadan yanlislikla gecilmesin: sure dolana kadar Tamam pasif, geri sayim gorunur.
+    var remaining = lockSeconds;
+    var ok = document.getElementById("customModalOkBtn");
+    modalLocked = true;
+    ok.disabled = true; ok.style.opacity = "0.5";
+    ok.textContent = "Tamam (" + remaining + ")";
+    modalCountdownTimer = setInterval(function(){
+      remaining--;
+      if (remaining <= 0){ stopModalCountdown(); }
+      else { ok.textContent = "Tamam (" + remaining + ")"; }
+    }, 1000);
+  }
   return new Promise(function(resolve){ modalResolve = resolve; });
 }
 function resolveCustomModal(val){
+  if (modalLocked) return;
+  stopModalCountdown();
   document.getElementById("customModalOverlay").classList.remove("show");
   if (modalResolve){ var r = modalResolve; modalResolve = null; r(val); }
 }
-function customAlert(message, title){ return openCustomModal("alert", title || "Bilgi", message); }
+function customAlert(message, title, lockSeconds){ return openCustomModal("alert", title || "Bilgi", message, undefined, lockSeconds); }
 function customConfirm(message, title){ return openCustomModal("confirm", title || "Emin misiniz?", message); }
 function customPrompt(message, title, placeholder){ return openCustomModal("prompt", title || "Bilgi Girin", message, placeholder); }
 
@@ -2559,7 +2583,7 @@ async function drainDuyuruQueue(){
         try { new Notification(d.title, { body: d.message, icon: "icons/icon-192.png" }); } catch (e) {}
       }
     } catch (e) {}
-    await customAlert(d.message + (d.sentBy ? "\n\n— " + d.sentBy : ""), "📢 " + d.title);
+    await customAlert(d.message + (d.sentBy ? "\n\n— " + d.sentBy : ""), "📢 " + d.title, 5);
   }
   duyuruShowing = false;
 }
