@@ -59,6 +59,7 @@ const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
 const SOFOR_DOC = { col: "config", id: "soforler" };
+const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
 const YONETICILER_COLLECTION = "yoneticiler";
 const SUPER_ADMIN_ID = "ercan-sahin";
@@ -85,6 +86,8 @@ var ayarlarDocRef = null;
 var cariler = [];
 var plakaListesi = [];
 var soforMap = {}; // plaka -> isim
+var yetkiMap = {}; // plaka -> true/false (plasiyer duzenleme yetkisi)
+var yetkiDocRef = null;
 var minBakiye = 250; // bu tutarin altindaki bakiyeler tum listelerden gizlenir
 var lastUploadAt = null;
 
@@ -207,6 +210,12 @@ function wireCustomModal(){
     if (e.target === this) resolveCustomModal(modalType === "prompt" ? null : false);
   });
 }
+function canEditDetail(){
+  if (currentRole === "admin") return true;
+  var pl = currentPlakalar[0];
+  if (!pl || pl === PLAKA_YOK) return false;
+  return yetkiMap[normalizePlate(pl)] === true;
+}
 function soforAdi(plaka){ return soforMap[normalizePlate(plaka)] || ""; }
 
 // ---------- Plaka / meta / sofor konfigurasyonu ----------
@@ -242,6 +251,19 @@ function updateVeriTarihiLabel(){
   var el = document.getElementById("veriTarihiLabel");
   if (!el) return;
   el.textContent = lastUploadAt ? "Veri tarihi: " + fmtTimestamp(lastUploadAt) : "Veri tarihi: -";
+}
+
+function watchYetki(){
+  try {
+    yetkiDocRef = doc(db, YETKI_DOC.col, YETKI_DOC.id);
+    onSnapshot(yetkiDocRef, function(snap){
+      yetkiMap = snap.exists() ? (snap.data() || {}) : {};
+      renderSoforList();
+      // detay penceresi acikken yetki degisirse alanlari hemen guncelle
+      var ov = document.getElementById("overlay");
+      if (ov && ov.classList.contains("show") && currentDocId) applyDetailPermissions();
+    }, function(err){ console.error("[cariTakip] yetki dinlenemedi:", err); });
+  } catch (e) { console.error("[cariTakip] yetki baglanamadi:", e); }
 }
 
 function watchSofor(){
@@ -501,9 +523,30 @@ function renderSoforList(){
     html += '  <span class="plaka">' + escapeHtml(p) + '</span>';
     html += '  <input type="text" value="' + escapeAttr(soforAdi(p)) + '" data-plaka="' + escapeAttr(p) + '" placeholder="Sofor adi" />';
     html += '  <button type="button" data-plaka="' + escapeAttr(p) + '">Kaydet</button>';
+    html += '  <div class="yetki-wrap" title="Plasiyerin not / tarih / sorunlu duzenleme yetkisi">';
+    html += '    <div class="switch' + (yetkiMap[normalizePlate(p)] === true ? ' on' : '') + '" data-yetki="' + escapeAttr(p) + '"><div class="dot"></div></div>';
+    html += '    <span class="yetki-lbl">Duzenleme</span>';
+    html += '  </div>';
     html += '</div>';
   }
   container.innerHTML = html;
+  container.querySelectorAll(".switch[data-yetki]").forEach(function(sw){
+    sw.addEventListener("click", async function(){
+      var plaka = sw.getAttribute("data-yetki");
+      var yeni = !sw.classList.contains("on");
+      var status = document.getElementById("soforStatus");
+      sw.classList.toggle("on", yeni); // aninda gorsel geri bildirim
+      status.textContent = "Kaydediliyor...";
+      try {
+        var f = {}; f[normalizePlate(plaka)] = yeni;
+        await setDoc(yetkiDocRef, f, { merge: true });
+        status.textContent = plaka + ": plasiyer duzenleme " + (yeni ? "ACIK" : "KAPALI") + ".";
+      } catch (e) {
+        sw.classList.toggle("on", !yeni);
+        status.textContent = "Kaydedilemedi: " + e.message;
+      }
+    });
+  });
   container.querySelectorAll("button[data-plaka]").forEach(function(btn){
     btn.addEventListener("click", async function(){
       var plaka = btn.getAttribute("data-plaka");
@@ -969,7 +1012,7 @@ function closeCalendar(){ document.getElementById("calendarPopup").classList.rem
 function wireCalendar(){
   on("dueFieldBtn", "click", function(e){
     e.stopPropagation();
-    if (currentRole !== "admin") return;
+    if (!canEditDetail()) return;
     var popup = document.getElementById("calendarPopup");
     if (popup.classList.contains("show")) closeCalendar(); else openCalendar();
   });
@@ -1051,8 +1094,12 @@ function openDetail(id){
 // Plasiyer; yoneticinin girdigi not, tarih, sorunlu isareti ve bakiyeyi DEGISTIREMEZ.
 // Sadece "Odeme Alindi" bildirimi yapabilir (yonetici onaylar/reddeder).
 function applyDetailPermissions(){
-  var ro = (currentRole !== "admin");
-  ["debtInput", "sabitNotInput", "noteInput"].forEach(function(id){
+  var ro = !canEditDetail();
+  // Bakiye Excel'den gelir: yetki acik olsa bile plasiyer bakiyeyi degistiremez.
+  var debtEl = document.getElementById("debtInput");
+  debtEl.readOnly = (currentRole !== "admin");
+  debtEl.style.opacity = (currentRole !== "admin") ? "0.75" : "";
+  ["sabitNotInput", "noteInput"].forEach(function(id){
     var el = document.getElementById(id);
     el.readOnly = ro;
     el.style.opacity = ro ? "0.75" : "";
@@ -1187,12 +1234,15 @@ async function saveCurrentNote(){
     paymentAmount: paid ? paidAmount : 0
   };
   if (currentRole !== "admin"){
-    // Plasiyer: ekrandaki degerler ne olursa olsun yalnizca odeme bildirimi kaydedilir.
+    // Plasiyer: bakiye her zaman sabit; yetkisi kapaliysa not/tarih/sorunlu da sabit,
+    // sadece odeme bildirimi kaydedilir.
     newValues.debt = c ? (c.debt || 0) : 0;
-    newValues.note = c ? (c.note || "") : "";
-    newValues.sabitNot = c ? (c.sabitNot || "") : "";
-    newValues.due = c ? (c.due || "") : "";
-    newValues.flagged = c ? !!c.flagged : false;
+    if (!canEditDetail()){
+      newValues.note = c ? (c.note || "") : "";
+      newValues.sabitNot = c ? (c.sabitNot || "") : "";
+      newValues.due = c ? (c.due || "") : "";
+      newValues.flagged = c ? !!c.flagged : false;
+    }
   }
 
   var changeLines = computeChangeLines(c, newValues);
@@ -2346,7 +2396,7 @@ function wireAdminFilters(){
 }
 
 function wireEvents(){
-  on("flagSwitch", "click", function(){ if (currentRole !== "admin") return; this.classList.toggle("on"); });
+  on("flagSwitch", "click", function(){ if (!canEditDetail()) return; this.classList.toggle("on"); });
   on("closeBtn", "click", closeDetail);
   on("overlay", "click", function(e){ if (e.target === this) closeDetail(); });
   on("saveBtn", "click", saveCurrentNote);
@@ -2579,6 +2629,7 @@ function wireLoginScreen(){
 watchPlakaConfig();
 watchMeta();
 watchSofor();
+watchYetki();
 watchAyarlar();
 watchYoneticiler();
 

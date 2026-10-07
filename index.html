@@ -223,6 +223,9 @@
   .sofor-item{ display:flex; gap:6px; align-items:center; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:8px; margin-bottom:6px; }
   .sofor-item .plaka{ font-size:11px; font-weight:600; flex:0 0 88px; }
   .sofor-item input{ flex:1; background:var(--card); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px; font-size:11px; }
+  .sofor-item .yetki-wrap{ display:flex; flex-direction:column; align-items:center; gap:2px; flex:0 0 auto; margin-left:2px; }
+  .sofor-item .switch.on{ background:var(--ok); }
+  .sofor-item .yetki-lbl{ font-size:8.5px; color:var(--muted); }
   .sofor-item button{ background:var(--accent); color:#fff; border:none; border-radius:6px; padding:6px 9px; font-size:10.5px; cursor:pointer; }
 
   .basari-box{ text-align:center; padding:10px 4px 4px 4px; }
@@ -472,7 +475,7 @@
       <div class="sub" id="detailMeta">-</div>
     </div>
     <div class="sheet-body">
-      <div class="sub hidden" id="detailReadonlyInfo" style="margin-bottom:8px;">Bu bilgiler yonetici tarafindan girilir, plasiyer degistiremez. Sadece "Odeme Alindi" bildirimi yapabilirsiniz.</div>
+      <div class="sub hidden" id="detailReadonlyInfo" style="margin-bottom:8px;">Bu bilgiler yonetici tarafindan girilir. Bu plaka icin duzenleme yetkisi kapali; sadece "Odeme Alindi" bildirimi yapabilirsiniz.</div>
       <div class="field">
         <label>Kalan Bakiye</label>
         <input type="text" inputmode="decimal" id="debtInput" />
@@ -643,7 +646,7 @@
 
 <div class="overlay" id="soforOverlay">
   <div class="sheet">
-    <div class="sheet-head"><h2>Sofor Tanimlama</h2><div class="sub">Her plakaya bir sofor/plasiyer ismi verebilirsiniz.</div></div>
+    <div class="sheet-head"><h2>Sofor Tanimlama</h2><div class="sub">Her plakaya bir sofor/plasiyer ismi verebilirsiniz. Sagdaki "Duzenleme" dugmesi acikken o plasiyer not / tarih / sorunlu isaretini degistirebilir (varsayilan: kapali).</div></div>
     <div class="sheet-body" id="soforList"></div>
     <div class="sheet-footer">
       <button class="btn close" id="closeSoforBtn" style="width:100%;">Kapat</button>
