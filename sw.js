@@ -83,7 +83,7 @@ self.addEventListener("fetch", function (event) {
   if (isAppFile) {
     // Network-first: once internetten dene, basarili olursa onbellegi guncelle.
     event.respondWith(
-      fetch(req).then(function (res) {
+      fetch(req, { cache: "no-cache" }).then(function (res) {
         var resClone = res.clone();
         caches.open(CACHE_NAME).then(function (cache) { cache.put(req, resClone); });
         return res;
