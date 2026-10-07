@@ -223,6 +223,10 @@
   .sofor-item{ display:flex; gap:6px; align-items:center; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:8px; margin-bottom:6px; }
   .sofor-item .plaka{ font-size:11px; font-weight:600; flex:0 0 88px; }
   .sofor-item input{ flex:1; background:var(--card); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px; font-size:11px; }
+  .dp-list{ margin-top:6px; max-height:170px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--card2); padding:4px 8px; }
+  .dp-item{ display:flex; align-items:center; gap:8px; padding:6px 0; font-size:12px; border-bottom:1px solid var(--border); }
+  .dp-item:last-child{ border-bottom:0; }
+  .dp-item input{ width:auto; }
   .sofor-item .yetki-wrap{ display:flex; flex-direction:column; align-items:center; gap:2px; flex:0 0 auto; margin-left:2px; }
   .sofor-item .switch.on{ background:var(--ok); }
   .sofor-item .yetki-lbl{ font-size:8.5px; color:var(--muted); }
@@ -606,8 +610,18 @@
 
 <div class="overlay" id="duyuruOverlay">
   <div class="sheet">
-    <div class="sheet-head"><h2>Duyuru Gonder</h2><div class="sub">Uygulamayi acan (veya acik olan) tum plasiyer/yoneticilere ekranda gosterilir. Son 48 saat icindeki duyurular, daha once gormeyenlere acilista gosterilir.</div></div>
+    <div class="sheet-head"><h2>Duyuru Gonder</h2><div class="sub">Sectiginiz alicilara (herkes, tum plasiyerler, tum yoneticiler veya secili plakalar) ekranda gosterilir. Son 48 saat icindeki duyurular, daha once gormeyenlere acilista gosterilir.</div></div>
     <div class="sheet-body">
+      <div class="field">
+        <label>Kime gonderilsin?</label>
+        <select class="search" id="duyuruHedef">
+          <option value="all">Herkes (yonetici + plasiyer)</option>
+          <option value="sales">Tum plasiyerler</option>
+          <option value="admin">Tum yoneticiler</option>
+          <option value="custom">Secili plakalar...</option>
+        </select>
+        <div class="dp-list hidden" id="duyuruPlakaList"></div>
+      </div>
       <div class="field">
         <label>Baslik</label>
         <input type="text" id="duyuruTitleInput" placeholder="Orn: Onemli Duyuru" maxlength="60" />

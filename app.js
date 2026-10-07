@@ -2223,6 +2223,22 @@ function wireHamburger(){
   on("pasifOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
   on("pasifSearch", "input", renderPasifList);
 
+  function renderDuyuruPlakalar(){
+    var box = document.getElementById("duyuruPlakaList");
+    var sel = document.getElementById("duyuruHedef").value;
+    box.classList.toggle("hidden", sel !== "custom");
+    if (sel !== "custom") return;
+    if (box.getAttribute("data-built") !== String(plakaListesi.length)){
+      var html = "";
+      plakaListesi.forEach(function(p){
+        html += '<label class="dp-item"><input type="checkbox" value="' + escapeAttr(normalizePlate(p)) + '" /> ' + escapeHtml(p) + (soforAdi(p) ? ' - ' + escapeHtml(soforAdi(p)) : '') + '</label>';
+      });
+      box.innerHTML = html || '<div class="sub">Tanimli plaka yok.</div>';
+      box.setAttribute("data-built", String(plakaListesi.length));
+    }
+  }
+  on("duyuruHedef", "change", renderDuyuruPlakalar);
+
   async function loadSentDuyurular(){
     var box = document.getElementById("duyuruSentList");
     if (!box) return;
@@ -2236,6 +2252,7 @@ function wireHamburger(){
         html += '<div class="history-item">';
         html += '  <div class="hname">' + escapeHtml(x.title || "") + '</div>';
         html += '  <div class="hmeta">' + escapeHtml(x.sentBy || "") + ' - ' + escapeHtml(fmtTimestamp(x.sentAt)) + '</div>';
+        html += '  <div class="hmeta">Alici: ' + escapeHtml(hedefLabel(x)) + '</div>';
         html += '  <div class="hnote" style="white-space:pre-line;">' + escapeHtml(x.message || "") + '</div>';
         html += '</div>';
       });
@@ -2249,6 +2266,8 @@ function wireHamburger(){
     document.getElementById("duyuruTitleInput").value = "";
     document.getElementById("duyuruMessageInput").value = "";
     document.getElementById("duyuruStatus").textContent = "";
+    document.getElementById("duyuruHedef").value = "all";
+    renderDuyuruPlakalar();
     document.getElementById("duyuruOverlay").classList.add("show");
     loadSentDuyurular();
   });
@@ -2259,10 +2278,16 @@ function wireHamburger(){
     var message = document.getElementById("duyuruMessageInput").value.trim();
     var status = document.getElementById("duyuruStatus");
     if (!title || !message){ status.textContent = "Baslik ve mesaj bos olamaz."; return; }
+    var hedef = document.getElementById("duyuruHedef").value;
+    var hedefPlakalar = [];
+    if (hedef === "custom"){
+      document.querySelectorAll("#duyuruPlakaList input:checked").forEach(function(cb){ hedefPlakalar.push(cb.value); });
+      if (hedefPlakalar.length === 0){ status.textContent = "En az bir plaka secin."; return; }
+    }
     status.textContent = "Gonderiliyor...";
     try {
       await setDoc(doc(collection(db, "duyurular")), {
-        title: title, message: message,
+        title: title, message: message, hedef: hedef, hedefPlakalar: hedefPlakalar,
         sentBy: editorLabel(), sentAt: serverTimestamp()
       });
       status.textContent = "Gonderildi.";
@@ -2522,6 +2547,27 @@ async function drainDuyuruQueue(){
   duyuruShowing = false;
 }
 
+// Duyuru bu kullaniciya yonelik mi? (hedef yoksa eski duyuru = herkese)
+function duyuruForMe(d){
+  var h = d.hedef || "all";
+  if (h === "all") return true;
+  if (h === "sales") return currentRole === "sales";
+  if (h === "admin") return currentRole === "admin";
+  if (h === "custom"){
+    if (currentRole !== "sales") return false;
+    var mine = normalizePlate(currentPlakalar[0] || "");
+    return (d.hedefPlakalar || []).indexOf(mine) !== -1;
+  }
+  return true;
+}
+function hedefLabel(d){
+  var h = d.hedef || "all";
+  if (h === "sales") return "Tum plasiyerler";
+  if (h === "admin") return "Tum yoneticiler";
+  if (h === "custom") return "Plakalar: " + (d.hedefPlakalar || []).join(", ");
+  return "Herkes";
+}
+
 function watchDuyurular(){
   if (unsubDuyuru) { unsubDuyuru(); unsubDuyuru = null; }
   var lastSeen = 0;
@@ -2536,6 +2582,7 @@ function watchDuyurular(){
         if (!d.sentAt || !d.sentAt.toMillis) return; // sunucu zamani henuz yazilmadi
         var ms = d.sentAt.toMillis();
         if (ms <= lastSeen || ms < cutoff) return;
+        if (!duyuruForMe(d)) return;
         fresh.push({ ms: ms, title: d.title || "Duyuru", message: d.message || "", sentBy: d.sentBy || "" });
       });
       if (fresh.length === 0) return;
