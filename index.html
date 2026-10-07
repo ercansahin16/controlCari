@@ -223,6 +223,7 @@
   .sofor-item{ display:flex; gap:6px; align-items:center; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:8px; margin-bottom:6px; }
   .sofor-item .plaka{ font-size:11px; font-weight:600; flex:0 0 88px; }
   .sofor-item input{ flex:1; background:var(--card); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px; font-size:11px; }
+  .duyuru-del{ background:var(--danger); color:#fff; border:none; border-radius:6px; padding:4px 10px; font-size:10.5px; cursor:pointer; flex-shrink:0; }
   .dp-list{ margin-top:6px; max-height:170px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--card2); padding:4px 8px; }
   .dp-item{ display:flex; align-items:center; gap:8px; padding:6px 0; font-size:12px; border-bottom:1px solid var(--border); }
   .dp-item:last-child{ border-bottom:0; }
@@ -630,8 +631,8 @@
         <label>Mesaj</label>
         <textarea id="duyuruMessageInput" placeholder="Bildirim icinde gorunecek metin" maxlength="200"></textarea>
       </div>
-      <div class="sub" style="margin:14px 0 6px;font-weight:600;color:var(--text);">Son gonderilen duyurular</div>
-      <div id="duyuruSentList"></div>
+      <div id="duyuruSentToggle" style="margin:14px 0 6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;padding:8px 0;border-top:1px solid var(--border);"><span id="duyuruSentArrow">▸</span> Son gonderilen duyurular</div>
+      <div id="duyuruSentList" class="hidden"></div>
     </div>
     <div class="sheet-footer">
       <div class="btn-row">

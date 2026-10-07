@@ -2238,6 +2238,13 @@ function wireHamburger(){
     }
   }
   on("duyuruHedef", "change", renderDuyuruPlakalar);
+  on("duyuruSentToggle", "click", function(){
+    var box = document.getElementById("duyuruSentList");
+    var open = box.classList.contains("hidden");
+    box.classList.toggle("hidden", !open);
+    document.getElementById("duyuruSentArrow").textContent = open ? "▾" : "▸";
+    if (open) loadSentDuyurular();
+  });
 
   async function loadSentDuyurular(){
     var box = document.getElementById("duyuruSentList");
@@ -2250,13 +2257,21 @@ function wireHamburger(){
       snap.forEach(function(d){
         var x = d.data();
         html += '<div class="history-item">';
-        html += '  <div class="hname">' + escapeHtml(x.title || "") + '</div>';
+        html += '  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;"><div class="hname">' + escapeHtml(x.title || "") + '</div><button type="button" class="duyuru-del" data-id="' + escapeAttr(d.id) + '">Sil</button></div>';
         html += '  <div class="hmeta">' + escapeHtml(x.sentBy || "") + ' - ' + escapeHtml(fmtTimestamp(x.sentAt)) + '</div>';
         html += '  <div class="hmeta">Alici: ' + escapeHtml(hedefLabel(x)) + '</div>';
         html += '  <div class="hnote" style="white-space:pre-line;">' + escapeHtml(x.message || "") + '</div>';
         html += '</div>';
       });
       box.innerHTML = html;
+      box.querySelectorAll(".duyuru-del").forEach(function(btn){
+        btn.addEventListener("click", async function(){
+          var ok = await customConfirm("Bu duyuru silinsin mi?", "Duyuruyu Sil");
+          if (!ok) return;
+          try { await deleteDoc(doc(db, "duyurular", btn.getAttribute("data-id"))); loadSentDuyurular(); }
+          catch (e2) { await customAlert("Silinemedi: " + e2.message, "Hata"); }
+        });
+      });
     } catch (err) { box.innerHTML = '<div class="sub" style="padding:6px 0;">Liste yuklenemedi: ' + escapeHtml(err.message) + '</div>'; }
   }
 
@@ -2268,8 +2283,10 @@ function wireHamburger(){
     document.getElementById("duyuruStatus").textContent = "";
     document.getElementById("duyuruHedef").value = "all";
     renderDuyuruPlakalar();
+    // gonderilen duyurular listesi kapali baslar; ok'a basinca acilip yuklenir
+    document.getElementById("duyuruSentList").classList.add("hidden");
+    document.getElementById("duyuruSentArrow").textContent = "▸";
     document.getElementById("duyuruOverlay").classList.add("show");
-    loadSentDuyurular();
   });
   on("closeDuyuruBtn", "click", function(){ document.getElementById("duyuruOverlay").classList.remove("show"); });
   on("duyuruOverlay", "click", function(e){ if (e.target === this) this.classList.remove("show"); });
@@ -2295,7 +2312,7 @@ function wireHamburger(){
       document.getElementById("duyuruTitleInput").value = "";
       document.getElementById("duyuruMessageInput").value = "";
       status.textContent = "";
-      loadSentDuyurular();
+      if (!document.getElementById("duyuruSentList").classList.contains("hidden")) loadSentDuyurular();
     } catch (e) {
       status.textContent = "Gonderilemedi: " + e.message;
     }
