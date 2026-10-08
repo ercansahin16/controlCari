@@ -1102,7 +1102,7 @@ function openDetail(id){
   if (iso){ dd.textContent = fmtDateISOtoTR(iso); dd.classList.remove("placeholder"); }
   else { dd.textContent = "Tarih secilmedi"; dd.classList.add("placeholder"); }
 
-  document.getElementById("flagSwitch").classList.toggle("on", !!c.flagged);
+  document.getElementById("flagSwitch").classList.toggle("on", effFlagged(c)); // otomatik sorunlu da ACIK gorunur
 
   var paidSw = document.getElementById("paidSwitch");
   paidSw.classList.toggle("on", !!c.paymentReported);
@@ -1171,7 +1171,7 @@ function computeChangeLines(before, after){
     else if (beforeDue && !afterDue) lines.push("Odeme tarihi silindi (onceki: " + fmtDateISOtoTR(beforeDue) + ")");
     else lines.push("Odeme tarihi degistirildi: " + fmtDateISOtoTR(beforeDue) + " -> " + fmtDateISOtoTR(afterDue));
   }
-  var beforeFlag = !!(before && before.flagged);
+  var beforeFlag = !!(before && effFlagged(before));
   var afterFlag = !!after.flagged;
   if (beforeFlag !== afterFlag) lines.push(afterFlag ? "Sorunlu isareti acildi" : "Sorunlu isareti kapatildi");
 
@@ -1265,7 +1265,7 @@ async function saveCurrentNote(){
       newValues.note = c ? (c.note || "") : "";
       newValues.sabitNot = c ? (c.sabitNot || "") : "";
       newValues.due = c ? (c.due || "") : "";
-      newValues.flagged = c ? !!c.flagged : false;
+      newValues.flagged = c ? effFlagged(c) : false;
     }
   }
 
@@ -1276,12 +1276,20 @@ async function saveCurrentNote(){
     return;
   }
 
+  // Sorunlu: dugme durumu mevcut etkin durumdan (elle + otomatik) farkliysa guncelle.
+  var effBefore = c ? effFlagged(c) : false;
+  var flagData = { flagged: c ? !!c.flagged : false };
+  if (newValues.flagged !== effBefore){
+    if (newValues.flagged){ flagData.flagged = true; flagData.flagClearedFor = ""; }
+    else { flagData.flagged = false; flagData.flagClearedFor = (c && c.sonTahTarihi) || "-"; }
+  }
+
   var data = {
     debt: newValues.debt,
     note: newValues.note,
     sabitNot: newValues.sabitNot,
     due: newValues.due,
-    flagged: newValues.flagged,
+    flagged: flagData.flagged,
     paymentReported: newValues.paymentReported,
     paymentAmount: newValues.paymentAmount,
     lastChangeDetail: changeLines.join("\n"),
@@ -1289,6 +1297,7 @@ async function saveCurrentNote(){
     updatedAt: serverTimestamp(),
     lastEditedAt: serverTimestamp()
   };
+  if (flagData.hasOwnProperty("flagClearedFor")) data.flagClearedFor = flagData.flagClearedFor;
   if (paid && !(c && c.paymentReported)){
     data.paymentReportedBy = editorLabel();
     data.paymentReportedAt = serverTimestamp();
@@ -1530,6 +1539,9 @@ function daysSinceCollection(c){
   return daysBetween(d, today);
 }
 function isAutoFlagged(c){
+  // Kullanici sorunlu dugmesini elle kapattiysa, o tahsilat tarihi degisene kadar
+  // otomatik sorunlu sayilmaz (yeni tahsilat gelirse kural tekrar isler).
+  if (c.flagClearedFor && c.flagClearedFor === (c.sonTahTarihi || "-")) return false;
   if (!c.sonTahTarihi) return true; // hic tahsilat tarihi yok -- otomatik sorunlu
   var days = daysSinceCollection(c);
   return days !== null && days >= AUTO_FLAG_DAYS;
@@ -2104,6 +2116,7 @@ function initRealtime(){
           lastChangeDetail: d.lastChangeDetail || "",
           sabitNot: d.sabitNot || "",
           dueReadFor: d.dueReadFor || "",
+          flagClearedFor: d.flagClearedFor || "",
           lastEditedBy: d.lastEditedBy || "", lastEditedAtLabel: fmtTimestamp(d.lastEditedAt)
         });
       });
