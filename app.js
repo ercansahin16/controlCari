@@ -907,6 +907,7 @@ var sortByOldestCollection = false; // "En Eski Tahsilat" chip'i ile acilir/kapa
 function render(){
   var list = document.getElementById("list");
   var q = document.getElementById("searchBox").value.toLocaleLowerCase("tr").trim();
+  document.getElementById("searchBox").classList.toggle("filled", q.length > 0); // dolu arama = aktif filtre (mavi cerceve)
   var visible = getVisibleCariler();
   // Arama yapilirken alt limitin altindaki cariler de listede gorunur.
   var listBase = q ? getVisibleCariler(true) : visible;
