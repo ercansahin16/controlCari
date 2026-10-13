@@ -67,6 +67,10 @@
   input[type=file]{ display:none; }
   .required-cols{ font-size:9px; color:var(--muted); margin-top:5px; line-height:1.4; }
   .search{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; padding:7px 9px; color:var(--text); font-size:12px; }
+  #updateBanner{ display:none; position:fixed; left:50%; transform:translateX(-50%); bottom:calc(10px + env(safe-area-inset-bottom)); z-index:900; align-items:center; gap:10px; background:rgba(30,36,48,.94); border:1px solid var(--accent); color:var(--text); border-radius:999px; padding:6px 8px 6px 14px; font-size:11.5px; box-shadow:0 4px 14px rgba(0,0,0,.45); max-width:calc(100vw - 24px); }
+  #updateBanner.show{ display:flex; }
+  #updateBanner button{ background:var(--accent); color:#fff; border:none; border-radius:999px; padding:5px 12px; font-size:11px; cursor:pointer; }
+  #updateBanner button:disabled{ opacity:.6; }
   #searchBox.filled{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
   .search-wrap{ display:flex; gap:6px; margin-top:8px; position:relative; }
   .search-dropdown{ display:none; position:absolute; top:100%; left:0; right:0; min-width:260px; margin-top:4px; max-height:55vh; overflow-y:auto; background:var(--card); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.45); z-index:60; }

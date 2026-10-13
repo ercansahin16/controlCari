@@ -74,6 +74,7 @@ self.addEventListener("activate", function (event) {
 self.addEventListener("fetch", function (event) {
   var req = event.request;
   if (req.method !== "GET") return;
+  if (req.url.indexOf("version.json") !== -1) return; // surum kontrolu her zaman aga gitsin
 
   var isAppFile = req.mode === "navigate" ||
     req.destination === "script" ||

@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.0.0"; // her guncellemede artirilir
+const APP_VERSION = "1.0.1.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -270,6 +270,57 @@ function watchMeta(){
       checkNightLock();
     }, function(err){ console.error("[cariTakip] meta dinlenemedi:", err); });
   } catch (e) { console.error("[cariTakip] meta baglanamadi:", e); }
+}
+
+// ---------- Yeni surum bildirimi ----------
+// version.json sunucudaki guncel surumu tutar. Uygulama aciksa periyodik kontrol edilir;
+// yeni surum varsa altta kucuk, rahatsiz etmeyen bir serit gosterilir (kullanici basana kadar kalir).
+
+function versionNewer(remote, local){
+  var a = String(remote).split(".").map(function(x){ return parseInt(x, 10) || 0; });
+  var b = String(local).split(".").map(function(x){ return parseInt(x, 10) || 0; });
+  for (var i = 0; i < Math.max(a.length, b.length); i++){
+    var x = a[i] || 0, y = b[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+function showUpdateBanner(remoteVersion){
+  var bar = document.getElementById("updateBanner");
+  if (!bar){
+    bar = document.createElement("div");
+    bar.id = "updateBanner";
+    bar.innerHTML = '<span id="updateBannerText"></span><button type="button" id="updateBannerBtn">Guncelle</button>';
+    document.body.appendChild(bar);
+    document.getElementById("updateBannerBtn").addEventListener("click", applyUpdate);
+  }
+  document.getElementById("updateBannerText").textContent = "🔄 Yeni surum var (" + remoteVersion + ")";
+  bar.classList.add("show");
+}
+async function applyUpdate(){
+  var btn = document.getElementById("updateBannerBtn");
+  if (btn){ btn.disabled = true; btn.textContent = "Yukleniyor..."; }
+  try {
+    if ("caches" in window){ var keys = await caches.keys(); await Promise.all(keys.map(function(k){ return caches.delete(k); })); }
+    if ("serviceWorker" in navigator){ var regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(function(r){ return r.update().catch(function(){}); })); }
+  } catch (e) {}
+  location.reload();
+}
+async function checkForUpdate(){
+  try {
+    var res = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    var data = await res.json();
+    if (data && data.version && versionNewer(data.version, APP_VERSION)) showUpdateBanner(data.version);
+  } catch (e) { /* cevrimdisi: sessizce gec */ }
+}
+var updateCheckTimer = null;
+function startUpdateChecks(){
+  checkForUpdate();
+  if (updateCheckTimer) clearInterval(updateCheckTimer);
+  updateCheckTimer = setInterval(checkForUpdate, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", function(){ if (!document.hidden) checkForUpdate(); });
 }
 
 function updateVersionLabels(){
@@ -2680,6 +2731,7 @@ function unlockApp(){
   updateMinBakiyeLabel();
   updateVeriTarihiLabel();
   updateVersionLabels();
+  if (!updateCheckTimer) startUpdateChecks();
   if (!appWired){ wireEvents(); appWired = true; }
   initRealtime();
   if (currentRole === "admin") watchHistory();
