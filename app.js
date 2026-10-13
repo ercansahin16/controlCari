@@ -58,6 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
+const APP_VERSION = "1.0.0.0"; // her guncellemede artirilir
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -271,6 +272,12 @@ function watchMeta(){
   } catch (e) { console.error("[cariTakip] meta baglanamadi:", e); }
 }
 
+function updateVersionLabels(){
+  ["appVersionLabel", "appVersionLogin"].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.textContent = "Surum " + APP_VERSION;
+  });
+}
 function updateVeriTarihiLabel(){
   var el = document.getElementById("veriTarihiLabel");
   if (!el) return;
@@ -734,12 +741,12 @@ function getSearchPool(){
   return active;
 }
 
-function getVisibleCariler(){
+function getVisibleCariler(ignoreLimit){
   var active = cariler.filter(function(c){ return c.aktif; });
   // Alt limit hem yonetici hem plasiyer listesinde uygulanir. Alacakli (eksi
   // bakiyeli) cariler alt limitten bagimsiz her zaman gosterilir. Limit altindaki
   // cariler listeden gizlenir ama arama kutusunun acilir listesinde yine bulunur.
-  active = active.filter(function(c){ return passesMinLimit(c); });
+  if (!ignoreLimit) active = active.filter(function(c){ return passesMinLimit(c); });
   var base = active;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
@@ -876,8 +883,19 @@ function refreshSearchDropdown(){
     // mousedown: input blur olmadan once yakalansin
     el.addEventListener("mousedown", function(e){ e.preventDefault(); });
     el.addEventListener("click", function(){
+      // Detay penceresi ACILMAZ: secilen carinin adi aramaya yazilir, ana listede sadece o cari gorunur.
+      var id = el.getAttribute("data-id");
+      var c = cariler.find(function(x){ return x.id === id; });
       hideSearchDropdown();
-      openDetail(el.getAttribute("data-id"));
+      if (!c) return;
+      box.value = c.name;
+      document.getElementById("searchClearBtn").classList.add("show");
+      box.blur();
+      render();
+      setTimeout(function(){
+        var rowEl = document.querySelector('.row[data-id="' + id + '"]');
+        if (rowEl) rowEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 60);
     });
   });
   dd.classList.add("show");
@@ -890,13 +908,15 @@ function render(){
   var list = document.getElementById("list");
   var q = document.getElementById("searchBox").value.toLocaleLowerCase("tr").trim();
   var visible = getVisibleCariler();
-  var filtered = visible.filter(function(c){ return !q || c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
+  // Arama yapilirken alt limitin altindaki cariler de listede gorunur.
+  var listBase = q ? getVisibleCariler(true) : visible;
+  var filtered = listBase.filter(function(c){ return !q || c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
   if (activeQuickFilter === "flagged") filtered = filtered.filter(function(c){ return effFlagged(c); });
   if (activeQuickFilter === "noted") filtered = filtered.filter(function(c){ return !!c.note; });
   if (activeQuickFilter === "duetoday") filtered = filtered.filter(function(c){ return c.due === todayISO(); });
   if (activeQuickFilter === "overdue") filtered = filtered.filter(function(c){ return isOverduePast(c); });
 
-  if (visible.length === 0){
+  if (listBase.length === 0){
     list.innerHTML = currentRole === "sales"
       ? '<div class="empty">Bu plakaya atanmis cari bulunamadi.</div>'
       : '<div class="empty">Henuz veri yok.<br/>Yukaridan bir Excel dosyasi yukleyin.</div>';
@@ -2658,6 +2678,7 @@ function unlockApp(){
   applyRoleUI();
   updateMinBakiyeLabel();
   updateVeriTarihiLabel();
+  updateVersionLabels();
   if (!appWired){ wireEvents(); appWired = true; }
   initRealtime();
   if (currentRole === "admin") watchHistory();
@@ -2754,6 +2775,7 @@ function wireLoginScreen(){
 
 watchPlakaConfig();
 watchMeta();
+updateVersionLabels();
 watchSofor();
 watchYetki();
 watchAyarlar();
