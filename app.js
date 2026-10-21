@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.1.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.2.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -732,7 +732,9 @@ function computeLastCutoff(now){
   if (now.getHours() < 1){ cutoff.setDate(cutoff.getDate() - 1); }
   return cutoff;
 }
+var NIGHT_LOCK_ENABLED = false; // gece kilidi kaldirildi; tekrar acmak icin true yapin
 function checkNightLock(){
+  if (!NIGHT_LOCK_ENABLED) { nightLockActive = false; hideNightLock(); return; }
   if (currentRole !== "sales") { nightLockActive = false; hideNightLock(); return; }
   if (nightLockBypassed) { nightLockActive = false; hideNightLock(); return; }
   var now = new Date();
