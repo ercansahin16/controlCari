@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.2.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.3.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -421,10 +421,40 @@ function renderUserManagementList(){
   var html = "";
   adminUsers.forEach(function(u){
     html += '<div class="plaka-item"><span>' + escapeHtml(u.name) + ' — <b>' + escapeHtml(u.password) + '</b></span>';
+    html += '<span style="display:flex;gap:6px;flex-shrink:0;">';
+    html += '<button type="button" class="pw-change" data-pwuid="' + escapeAttr(u.id) + '" style="background:var(--card2);color:var(--text);border:1px solid var(--border);">Sifre Degistir</button>';
     if (!u.isSuper) html += '<button type="button" data-uid="' + escapeAttr(u.id) + '">Kaldir</button>';
-    html += '</div>';
+    html += '</span></div>';
   });
   container.innerHTML = html;
+  container.querySelectorAll("button[data-pwuid]").forEach(function(btn){
+    btn.addEventListener("click", async function(){
+      var uid = btn.getAttribute("data-pwuid");
+      var target = adminUsers.find(function(x){ return x.id === uid; });
+      if (!target) return;
+      var status = document.getElementById("userMgmtStatus");
+      // Once yetkili (ana yonetici) kendi sifresini girer
+      var superUser = adminUsers.find(function(x){ return x.id === SUPER_ADMIN_ID; });
+      var superPass = superUser ? superUser.password : "admin123";
+      var own = await customPrompt("Devam etmek icin kendi sifrenizi girin:", "Yetki Dogrulama");
+      if (own === null) return;
+      if (own !== superPass){ await customAlert("Yanlis sifre.", "Yetki Reddedildi"); return; }
+      var yeni = await customPrompt(target.name + " icin yeni sifreyi girin (1-16 karakter):", "Sifre Degistir");
+      if (yeni === null) return;
+      yeni = yeni.trim();
+      if (!yeni || yeni.length > 16){ await customAlert("Sifre 1-16 karakter arasinda olmalidir.", "Uyari"); return; }
+      if (adminUsers.some(function(x){ return x.id !== uid && x.password === yeni; })){
+        await customAlert("Bu sifre baska bir yoneticide kullaniliyor, farkli bir sifre secin.", "Uyari"); return;
+      }
+      status.textContent = "Kaydediliyor...";
+      try {
+        await setDoc(doc(db, YONETICILER_COLLECTION, uid), { password: yeni }, { merge: true });
+        status.textContent = target.name + " icin sifre guncellendi.";
+      } catch (e) {
+        status.textContent = "Guncellenemedi: " + e.message;
+      }
+    });
+  });
   container.querySelectorAll("button[data-uid]").forEach(function(btn){
     btn.addEventListener("click", async function(){
       var ok = await customConfirm("Bu yoneticiyi kaldirmak istediginize emin misiniz?", "Kaldir");
