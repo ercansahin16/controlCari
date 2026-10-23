@@ -8,7 +8,19 @@
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#0f1115" />
+<meta name="theme-color" content="#0f1115" id="metaThemeColor" />
+<script>
+  // Tema: kayitli tercih varsa ilk boyamadan once uygula (acilista renk sicramasi olmasin)
+  (function(){
+    try {
+      var t = localStorage.getItem("ledsaha_theme");
+      if (t === "light"){
+        document.documentElement.setAttribute("data-theme", "light");
+        var m = document.getElementById("metaThemeColor"); if (m) m.setAttribute("content", "#f3f5f9");
+      }
+    } catch (e) {}
+  })();
+</script>
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -29,6 +41,17 @@
     --text:#e7e9ee; --muted:#8b93a3; --accent:#5b8dee; --danger:#e5566d;
     --danger-bg:#2a1820; --ok:#3fbf7f; --ok-bg:#0f2b1e; --warn:#e0a83f;
   }
+  :root[data-theme="light"]{
+    --bg:#f3f5f9; --card:#ffffff; --card2:#eef1f6; --border:#d3d9e4;
+    --text:#1b2230; --muted:#5f6b80; --accent:#3b6fd8; --danger:#d23a53;
+    --danger-bg:#fde9ed; --ok:#1f9d5f; --ok-bg:#e2f6eb; --warn:#b97a0a;
+    color-scheme: light;
+  }
+  :root[data-theme="light"] .row .sabitnot-preview{ color:#a07400; }
+  :root[data-theme="light"] .switch{ background:#c3cad6; }
+  :root[data-theme="light"] #closeBtn{ background:#f6d3d8; border-color:#e19aa5; color:#8a1f30; }
+  :root[data-theme="light"] .overlay{ background:rgba(20,28,45,.35); }
+  :root[data-theme="light"] #updateBanner{ background:rgba(255,255,255,.96); }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html, body{ touch-action: manipulation; }
   body{
@@ -401,6 +424,7 @@
 <div class="topbar">
   <div class="topbar-head">
     <h1>LED Saha <span id="cariCountLabel">(0)</span></h1>
+    <button class="icon-btn" id="themeBtn" title="Tema">🌙</button>
     <button class="icon-btn" id="paymentIconBtn">💰<span class="badge hidden" id="paymentBadge">0</span></button>
     <button class="icon-btn" id="dueAlertBtn">🔔<span class="badge hidden" id="dueAlertBadge">0</span></button>
     <button class="icon-btn" id="hamburgerBtn">☰</button>

@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.4.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.5.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -321,6 +321,16 @@ function startUpdateChecks(){
   if (updateCheckTimer) clearInterval(updateCheckTimer);
   updateCheckTimer = setInterval(checkForUpdate, 5 * 60 * 1000);
   document.addEventListener("visibilitychange", function(){ if (!document.hidden) checkForUpdate(); });
+}
+
+function applyTheme(t){
+  if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+  else document.documentElement.removeAttribute("data-theme");
+  var m = document.getElementById("metaThemeColor");
+  if (m) m.setAttribute("content", t === "light" ? "#f3f5f9" : "#0f1115");
+  var b = document.getElementById("themeBtn");
+  if (b) b.textContent = (t === "light") ? "☀️" : "🌙";
+  try { localStorage.setItem("ledsaha_theme", t); } catch (e) {}
 }
 
 function updateVersionLabels(){
@@ -2275,6 +2285,11 @@ function wireHamburger(){
     openToplananTahsilatPanel();
   });
 
+  on("themeBtn", "click", function(){
+    var light = document.documentElement.getAttribute("data-theme") === "light";
+    applyTheme(light ? "dark" : "light");
+  });
+
   on("menuPlakaDegistir", "click", function(e){
     e.preventDefault(); menu.classList.add("hidden");
     switchPlaka();
@@ -2864,6 +2879,7 @@ function wireLoginScreen(){
 watchPlakaConfig();
 watchMeta();
 updateVersionLabels();
+applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
 watchSofor();
 watchYetki();
 watchAyarlar();
