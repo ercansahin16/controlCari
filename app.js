@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.3.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.4.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -1031,7 +1031,10 @@ function render(){
       html += '    <div class="tags">';
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
       html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
-      if (c.sonTahTarihi) html += '<span class="tag">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + '</span>';
+      if (c.sonTahTarihi){
+        var dsc = daysSinceCollection(c);
+        html += '<span class="tag">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + (dsc !== null ? ' (' + dsc + ' gun)' : '') + '</span>';
+      }
       if (c.due) html += '<span class="tag due-chip">Bekleniyor: ' + escapeHtml(fmtDateISOtoTR(c.due)) + '</span>';
       html += '    </div>';
       if (c.sabitNot) html += '    <div class="sabitnot-preview">📌 ' + escapeHtml(c.sabitNot) + '</div>';
