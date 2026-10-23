@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.6.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.7.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -298,14 +298,19 @@ function showUpdateBanner(remoteVersion){
   document.getElementById("updateBannerText").textContent = "🔄 Yeni surum var (" + remoteVersion + ")";
   bar.classList.add("show");
 }
+// Sert yenileme: servis calisanini kaldirir, onbellekleri siler ve sayfayi BENZERSIZ adresle
+// yeniden acar. Boylece tarayicinin HTTP onbellegindeki eski index.html/app.js kullanilmaz.
+async function hardRefresh(){
+  try {
+    if ("serviceWorker" in navigator){ var regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(function(r){ return r.unregister().catch(function(){}); })); }
+    if ("caches" in window){ var keys = await caches.keys(); await Promise.all(keys.map(function(k){ return caches.delete(k); })); }
+  } catch (e) {}
+  location.replace(location.pathname + "?r=" + Date.now());
+}
 async function applyUpdate(){
   var btn = document.getElementById("updateBannerBtn");
   if (btn){ btn.disabled = true; btn.textContent = "Yukleniyor..."; }
-  try {
-    if ("caches" in window){ var keys = await caches.keys(); await Promise.all(keys.map(function(k){ return caches.delete(k); })); }
-    if ("serviceWorker" in navigator){ var regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(function(r){ return r.update().catch(function(){}); })); }
-  } catch (e) {}
-  location.reload();
+  hardRefresh();
 }
 async function checkForUpdate(){
   try {
@@ -2288,11 +2293,7 @@ function wireHamburger(){
   on("refreshBtn", "click", async function(){
     // Sayfayi yeniden yukle (onbellegi temizleyip en guncel surumu ceker)
     this.disabled = true; this.style.opacity = ".5";
-    try {
-      if ("caches" in window){ var keys = await caches.keys(); await Promise.all(keys.map(function(k){ return caches.delete(k); })); }
-      if ("serviceWorker" in navigator){ var regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(function(r){ return r.update().catch(function(){}); })); }
-    } catch (e) {}
-    location.reload();
+    hardRefresh();
   });
 
   on("themeBtn", "click", function(){
