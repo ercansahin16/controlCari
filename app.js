@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.12.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.13.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -1046,7 +1046,7 @@ function render(){
       html += '    <div class="tags">';
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
       html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
-      if (!c.sonTahTarihi) html += '<span class="tag new-tag">YENI CARI</span>';
+      if (!c.sonTahTarihi) html += '<span class="tag new-tag">YENI CARI' + (newCariDays(c) !== null ? ' (' + newCariDays(c) + '. gun)' : '') + '</span>';
       if (c.sonTahTarihi){
         var dsc = daysSinceCollection(c);
         html += '<span class="tag">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + (dsc !== null ? ' (' + dsc + ' gun)' : '') + '</span>';
@@ -1068,7 +1068,7 @@ function render(){
       html += '  </div>';
       html += '  <div class="right">';
       html += '    <div class="debt' + debtClass + '">' + fmtMoney(c.debt) + '</div>';
-      if (isFlagged) html += '    <div class="badgetxt">' + (c.flagged ? "SORUNLU" : "SORUNLU (" + AUTO_FLAG_DAYS + "+ gun)") + '</div>';
+      if (isFlagged) html += '    <div class="badgetxt">' + (c.flagged ? "SORUNLU" : (c.sonTahTarihi ? "SORUNLU (" + AUTO_FLAG_DAYS + "+ gun)" : "SORUNLU (yeni cari, " + NEW_CARI_GRACE_DAYS + "+ gun tahsilat yok)")) + '</div>';
       html += '  </div>';
       html += '</div>';
     }
@@ -1672,11 +1672,24 @@ function daysSinceCollection(c){
   var today = new Date(); today.setHours(0, 0, 0, 0);
   return daysBetween(d, today);
 }
+var NEW_CARI_GRACE_DAYS = 15; // yeni cariye tanınan sure (gun)
+function newCariDays(c){
+  if (!c.ilkGorulme) return null;
+  var d = new Date(c.ilkGorulme + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((today - d) / 86400000);
+}
 function isAutoFlagged(c){
   // Kullanici sorunlu dugmesini elle kapattiysa, o tahsilat tarihi degisene kadar
   // otomatik sorunlu sayilmaz (yeni tahsilat gelirse kural tekrar isler).
   if (c.flagClearedFor && c.flagClearedFor === (c.sonTahTarihi || "-")) return false;
-  if (!c.sonTahTarihi) return false; // hic tahsilat tarihi yok = yeni cari, otomatik sorunlu SAYILMAZ
+  if (!c.sonTahTarihi){
+    // Hic tahsilat tarihi yok = YENI cari: NEW_CARI_GRACE_DAYS gun sorunlu sayilmaz.
+    // Sure, carinin Excel'de ilk goruldugu gunden itibaren sayilir.
+    var ny = newCariDays(c);
+    return ny !== null && ny >= NEW_CARI_GRACE_DAYS;
+  }
   var days = daysSinceCollection(c);
   return days !== null && days >= AUTO_FLAG_DAYS;
 }
@@ -2141,6 +2154,8 @@ async function handleExcelUpload(file){
       // Yeni tahsilat tarihi eskisinden ilerideyse (yeni bir odeme gelmis demektir),
       // Gecici (Not) VE Odeme Beklenen Tarihi otomatik temizlenir -- Sabit (Not) hicbir zaman dokunulmaz.
       var oldC = oldById[id];
+      // Cari Excel'de ilk kez goruldugu gun kaydedilir (yeni cari suresi bundan sayilir)
+      if (!oldC || !oldC.ilkGorulme) updateData.ilkGorulme = dateStr(new Date());
       if (oldC){
         var oldDate = parseTRDate(oldC.sonTahTarihi);
         var newDate = parseTRDate(sonTahTarihi);
@@ -2251,6 +2266,7 @@ function initRealtime(){
           sabitNot: d.sabitNot || "",
           dueReadFor: d.dueReadFor || "",
           flagClearedFor: d.flagClearedFor || "",
+          ilkGorulme: d.ilkGorulme || "",
           lastEditedBy: d.lastEditedBy || "", lastEditedAtLabel: fmtTimestamp(d.lastEditedAt)
         });
       });
