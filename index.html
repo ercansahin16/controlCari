@@ -153,6 +153,11 @@
   .field label{ display:block; font-size:10.5px; color:var(--muted); margin-bottom:3px; }
   .field textarea, .field input[type=date]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:12px; font-family:inherit; }
   .field textarea{ min-height:52px; resize:vertical; }
+  .ta-wrap{ position:relative; }
+  .ta-wrap textarea{ padding-right:34px; }
+  .ta-clear{ position:absolute; top:4px; right:6px; width:26px; height:26px; border:none; border-radius:50%; background:transparent; color:var(--muted); font-size:24px; line-height:1; cursor:pointer; padding:0; display:none; }
+  .ta-clear:hover{ color:var(--danger); }
+  .ta-wrap.has-text:not(.ro) .ta-clear{ display:block; }
   .field input[type=number]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:13px; font-family:inherit; }
   .field input[type=text]{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:7px; font-size:13px; font-family:inherit; }
 
@@ -535,12 +540,12 @@
 
       <div class="field">
         <label>Sabit (Not)</label>
-        <textarea id="sabitNotInput" placeholder="Ornek: Her ayin 20'sinde odeme yapiyor."></textarea>
+        <div class="ta-wrap"><textarea id="sabitNotInput" placeholder="Ornek: Her ayin 20'sinde odeme yapiyor."></textarea><button type="button" class="ta-clear" data-target="sabitNotInput" title="Temizle">&times;</button></div>
       </div>
 
       <div class="field">
         <label>Gecici (Not)</label>
-        <textarea id="noteInput" placeholder="Ornek: Ay basinda odeyecegini soyledi."></textarea>
+        <div class="ta-wrap"><textarea id="noteInput" placeholder="Ornek: Ay basinda odeyecegini soyledi."></textarea><button type="button" class="ta-clear" data-target="noteInput" title="Temizle">&times;</button></div>
       </div>
 
       <div class="field date-field-wrap">
@@ -830,6 +835,6 @@
 
 </div><!-- #appRoot -->
 
-<script type="module" src="app.js?v=1.0.10.0"></script>
+<script type="module" src="app.js?v=1.0.11.0"></script>
 </body>
 </html>

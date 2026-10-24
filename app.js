@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.10.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.11.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -1240,6 +1240,15 @@ function openDetail(id){
 
 // Plasiyer; yoneticinin girdigi not, tarih, sorunlu isareti ve bakiyeyi DEGISTIREMEZ.
 // Sadece "Odeme Alindi" bildirimi yapabilir (yonetici onaylar/reddeder).
+function refreshNoteClearButtons(){
+  ["sabitNotInput", "noteInput"].forEach(function(id){
+    var ta = document.getElementById(id);
+    var wrap = ta && ta.parentNode;
+    if (!wrap) return;
+    wrap.classList.toggle("has-text", ta.value.length > 0);
+    wrap.classList.toggle("ro", !!ta.readOnly);
+  });
+}
 function applyDetailPermissions(){
   var ro = !canEditDetail();
   // Bakiye Excel'den gelir: yetki acik olsa bile plasiyer bakiyeyi degistiremez.
@@ -1258,6 +1267,7 @@ function applyDetailPermissions(){
   });
   var info = document.getElementById("detailReadonlyInfo");
   if (info) info.classList.toggle("hidden", !ro);
+  refreshNoteClearButtons();
 }
 function closeDetail(){
   closeCalendar();
@@ -2295,6 +2305,20 @@ function wireHamburger(){
     // Sayfayi yeniden yukle (onbellegi temizleyip en guncel surumu ceker)
     this.disabled = true; this.style.opacity = ".5";
     hardRefresh();
+  });
+
+  document.querySelectorAll(".ta-clear").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var ta = document.getElementById(btn.getAttribute("data-target"));
+      if (!ta || ta.readOnly) return;
+      ta.value = "";
+      refreshNoteClearButtons();
+      ta.focus();
+    });
+  });
+  ["sabitNotInput", "noteInput"].forEach(function(id){
+    var ta = document.getElementById(id);
+    if (ta) ta.addEventListener("input", refreshNoteClearButtons);
   });
 
   on("themeBtn", "click", function(){
