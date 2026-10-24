@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.13.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.1.0.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -67,7 +67,10 @@ const SUPER_ADMIN_ID = "ercan-sahin";
 const ADMIN_DOC_ID_KEY = "cariTakip_adminDocId_v5";
 const BASARI_DOC = { col: "config", id: "gunluk_basari" }; // artik kullanilmiyor (gecmis uyumluluk icin birakildi)
 const GUNLUK_BAKIYE_COLLECTION = "gunluk_bakiye"; // her takvim gunu icin plaka -> toplam bakiye
-const GUNLUK_CARI_BAKIYE_COLLECTION = "gunluk_cari_bakiye"; // her takvim gunu icin cariId -> {n,d,k,p} (Toplanan Tahsilat raporu icin)
+const GUNLUK_CARI_BAKIYE_COLLECTION = "gunluk_cari_bakiye";
+const SUBE_KEY = "ledsaha_sube";
+const SUBELER = ["MERKEZ", "MEVLANA"];
+var currentSube = "MERKEZ"; // yonetici hangi subeyi goruntuluyor (plasiyer her zaman MERKEZ) // her takvim gunu icin cariId -> {n,d,k,p} (Toplanan Tahsilat raporu icin)
 const PLAKA_YOK = "PLAKA_YOK";
 
 // Excelde bulunmasi zorunlu (sadece bunlar) kolonlar
@@ -90,7 +93,8 @@ var soforMap = {}; // plaka -> isim
 var yetkiMap = {}; // plaka -> true/false (plasiyer duzenleme yetkisi)
 var yetkiDocRef = null;
 var minBakiye = 250; // bu tutarin altindaki bakiyeler tum listelerden gizlenir
-var lastUploadAt = null;
+var lastUploadAt = null; // secili subenin son yukleme zamani
+var lastUploadAtBySube = { MERKEZ: null, MEVLANA: null };
 
 var currentDocId = null;
 var currentUserName = "";
@@ -131,6 +135,14 @@ function parseNumber(v){
   else if (s.indexOf(",") !== -1){ s = s.replace(",", "."); }
   var n = parseFloat(s);
   return isNaN(n) ? 0 : n;
+}
+// Excel tarih hucresi (seri no) -> "gg.aa.yyyy" (Merkez raporundaki metin formatiyla ayni)
+function excelDateToTR(v){
+  if (typeof v === "number" && v > 20000 && v < 80000){
+    var d = new Date(Math.round((v - 25569) * 86400000));
+    return pad2(d.getUTCDate()) + "." + pad2(d.getUTCMonth() + 1) + "." + d.getUTCFullYear();
+  }
+  return (v === null || v === undefined) ? "" : v.toString().trim();
 }
 function fmtMoney(n){ return (n || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtDateISOtoTR(iso){
@@ -265,7 +277,9 @@ function watchMeta(){
     metaDocRef = doc(db, META_DOC.col, META_DOC.id);
     onSnapshot(metaDocRef, function(snap){
       var data = snap.exists() ? snap.data() : {};
-      lastUploadAt = data.lastUploadAt && data.lastUploadAt.toDate ? data.lastUploadAt.toDate() : null;
+      lastUploadAtBySube.MERKEZ = data.lastUploadAt && data.lastUploadAt.toDate ? data.lastUploadAt.toDate() : null;
+      lastUploadAtBySube.MEVLANA = data.lastUploadAtMevlana && data.lastUploadAtMevlana.toDate ? data.lastUploadAtMevlana.toDate() : null;
+      lastUploadAt = lastUploadAtBySube[currentSube] || null;
       updateVeriTarihiLabel();
       checkNightLock();
     }, function(err){ console.error("[cariTakip] meta dinlenemedi:", err); });
@@ -344,6 +358,43 @@ function updateVersionLabels(){
     if (el) el.textContent = "Surum " + APP_VERSION;
   });
 }
+// ---------- Sube (Merkez / Mevlana) ----------
+function cariSube(c){ return c.sube || "MERKEZ"; }
+function inBranch(c){ return cariSube(c) === currentSube; }
+function branchCariler(){ return cariler.filter(inBranch); }
+function gunlukCol(sube){ return (sube || currentSube) === "MEVLANA" ? "gunluk_bakiye_mevlana" : GUNLUK_BAKIYE_COLLECTION; }
+function gunlukCariCol(sube){ return (sube || currentSube) === "MEVLANA" ? "gunluk_cari_bakiye_mevlana" : GUNLUK_CARI_BAKIYE_COLLECTION; }
+function metaUploadField(sube){ return sube === "MEVLANA" ? "lastUploadAtMevlana" : "lastUploadAt"; }
+
+function setSube(sube, silent){
+  if (SUBELER.indexOf(sube) === -1) sube = "MERKEZ";
+  if (currentRole !== "admin") sube = "MERKEZ";
+  currentSube = sube;
+  try { localStorage.setItem(SUBE_KEY, sube); } catch (e) {}
+  lastUploadAt = lastUploadAtBySube[sube] || null;
+  filterKategori1Values = []; filterPlakaValues = [];
+  var box = document.getElementById("searchBox");
+  if (box){ box.value = ""; var cb = document.getElementById("searchClearBtn"); if (cb) cb.classList.remove("show"); }
+  activeQuickFilter = null;
+  updateVeriTarihiLabel();
+  updateSubeSwitch();
+  if (!silent){ populateAdminFilters(); render(); }
+}
+function updateSubeSwitch(){
+  var wrap = document.getElementById("subeSwitch");
+  if (!wrap) return;
+  wrap.classList.toggle("hidden", currentRole !== "admin");
+  SUBELER.forEach(function(sb){
+    var btn = document.getElementById("sube" + (sb === "MERKEZ" ? "Merkez" : "Mevlana") + "Btn");
+    if (!btn) return;
+    var n = cariler.filter(function(c){ return c.aktif && cariSube(c) === sb; }).length;
+    btn.textContent = (sb === "MERKEZ" ? "Merkez" : "Mevlana") + " (" + n + ")";
+    btn.classList.toggle("active", currentSube === sb);
+  });
+  var adminFilters = document.getElementById("adminFilterRow");
+  if (adminFilters) adminFilters.classList.toggle("sube-mev", currentSube === "MEVLANA");
+}
+
 function updateVeriTarihiLabel(){
   var el = document.getElementById("veriTarihiLabel");
   if (!el) return;
@@ -501,8 +552,8 @@ async function openBasariPanel(){
     var todayStr = dateStr(todayDate);
     var yesterdayStr = dateStr(yesterdayDate);
 
-    var todaySnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, todayStr));
-    var yestSnap = await getDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, yesterdayStr));
+    var todaySnap = await getDoc(doc(db, gunlukCol(), todayStr));
+    var yestSnap = await getDoc(doc(db, gunlukCol(), yesterdayStr));
 
     if (!yestSnap.exists()){
       body.innerHTML = '<div class="empty">Dun (' + fmtDateISOtoTR(yesterdayStr) + ') icin Excel yuklemesi yapilmamis, karsilastirma yapilamiyor.</div>';
@@ -520,8 +571,8 @@ async function openBasariPanel(){
 
     // Gercek tahsilat: cari bazinda sadece bakiyesi AZALANLARIN toplami. Net bakiye farki
     // (dun toplam - bugun toplam) yeni satis/fatura eklenince eksiye dusuyordu; yanlisti.
-    var cToday = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, todayStr));
-    var cYest = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, yesterdayStr));
+    var cToday = await getDoc(doc(db, gunlukCariCol(), todayStr));
+    var cYest = await getDoc(doc(db, gunlukCariCol(), yesterdayStr));
     if (cToday.exists() && cYest.exists()){
       var cd = cToday.data() || {}, pd = cYest.data() || {};
       var perPlate = {};
@@ -718,7 +769,7 @@ function renderMultiSelectOptions(containerId, options, selectedValues, labelFn)
 }
 
 function populateAdminFilters(){
-  var kategori1ler = Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); });
+  var kategori1ler = Array.from(new Set(branchCariler().map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); });
   filterKategori1Values = filterKategori1Values.filter(function(v){ return kategori1ler.indexOf(v) !== -1; });
   renderMultiSelectOptions("filterKategori1Options", kategori1ler, filterKategori1Values);
 
@@ -827,7 +878,7 @@ function passesMinLimit(c){ var d = c.debt || 0; return d < 0 || d >= minBakiye;
 // Arama kutusunun acilir listesi icin havuz: alt limitin altindakiler dahil tum aktif
 // cariler. Plasiyerde sadece kendi plakasi, yoneticide plaka/bolge filtresinden bagimsiz hepsi.
 function getSearchPool(){
-  var active = cariler.filter(function(c){ return c.aktif; });
+  var active = cariler.filter(function(c){ return c.aktif && inBranch(c); });
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
     active = active.filter(function(c){
@@ -840,7 +891,7 @@ function getSearchPool(){
 }
 
 function getVisibleCariler(ignoreLimit){
-  var active = cariler.filter(function(c){ return c.aktif; });
+  var active = cariler.filter(function(c){ return c.aktif && inBranch(c); });
   // Alt limit hem yonetici hem plasiyer listesinde uygulanir. Alacakli (eksi
   // bakiyeli) cariler alt limitten bagimsiz her zaman gosterilir. Limit altindaki
   // cariler listeden gizlenir ama arama kutusunun acilir listesinde yine bulunur.
@@ -1045,7 +1096,7 @@ function render(){
       html += '    <div class="name">' + escapeHtml(c.name) + (c.kod ? ' <span class="kodtag">(' + escapeHtml(c.kod) + ')</span>' : '') + '</div>';
       html += '    <div class="tags">';
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
-      html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
+      if (cariSube(c) !== "MEVLANA") html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
       if (!c.sonTahTarihi) html += '<span class="tag new-tag">YENI CARI' + (newCariDays(c) !== null ? ' (' + newCariDays(c) + '. gun)' : '') + '</span>';
       if (c.sonTahTarihi){
         var dsc = daysSinceCollection(c);
@@ -1212,7 +1263,8 @@ function openDetail(id){
 
   var metaParts = [];
   if (c.kategori1) metaParts.push("Bolge: " + c.kategori1);
-  metaParts.push("Plaka: " + (c.plaka || "Yok"));
+  if (cariSube(c) === "MEVLANA") metaParts.push("Sube: MEVLANA");
+  else metaParts.push("Plaka: " + (c.plaka || "Yok"));
   if (c.sonTahTarihi) metaParts.push("Son Tahsilat: " + c.sonTahTarihi);
   document.getElementById("detailMeta").textContent = metaParts.join(" | ");
 
@@ -1613,7 +1665,7 @@ function renderHistoryList(){
 
 function renderPasifList(){
   var q = document.getElementById("pasifSearch").value.toLocaleLowerCase("tr").trim();
-  var pasifler = cariler.filter(function(c){ return !c.aktif; });
+  var pasifler = cariler.filter(function(c){ return !c.aktif && inBranch(c); });
   pasifler = pasifler.filter(function(c){ return !q || c.name.toLocaleLowerCase("tr").indexOf(q) !== -1; });
   pasifler.sort(function(a, b){ return a.name.localeCompare(b.name, "tr"); });
 
@@ -1838,7 +1890,7 @@ function wireOdemeBekleyenPanel(){
 // ---------- Tahsilat Trendi (tarih araligina gore gunluk net tahsilat) ----------
 
 async function loadTrendData(startStr, endStr){
-  var snap = await getDocs(collection(db, GUNLUK_BAKIYE_COLLECTION));
+  var snap = await getDocs(collection(db, gunlukCol()));
   var byDate = {};
   snap.forEach(function(d){
     var data = d.data() || {};
@@ -1943,8 +1995,8 @@ async function loadToplananTahsilat(dateISO){
     var prevDate = new Date(curDate); prevDate.setDate(prevDate.getDate() - 1);
     var prevISO = dateStr(prevDate);
 
-    var curSnap = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, dateISO));
-    var prevSnap = await getDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, prevISO));
+    var curSnap = await getDoc(doc(db, gunlukCariCol(), dateISO));
+    var prevSnap = await getDoc(doc(db, gunlukCariCol(), prevISO));
 
     if (!curSnap.exists()){
       body.innerHTML = '<div class="empty">' + escapeHtml(fmtDateISOtoTR(dateISO)) + ' icin Excel yuklemesi yok.</div>';
@@ -2021,7 +2073,7 @@ function wireToplananTahsilatPanel(){
 // ---------- Excel yukleme (sadece yonetici) ----------
 
 function requiredColumnsText(){
-  return "Gerekli kolonlar: " + REQUIRED_COLUMNS.map(function(c){ return c.label; }).join(", ");
+  return "Merkez raporu: " + REQUIRED_COLUMNS.map(function(c){ return c.label; }).join(", ") + " | Mevlana raporu: Ünvan, Şube (MEVLANA), Borç Bak., Son Tah. Tarihi";
 }
 
 // ---------- Yukleme modali ----------
@@ -2059,6 +2111,8 @@ async function handleExcelUpload(file){
     var wb = XLSX.read(data, { type: "array" });
     var sheet = wb.Sheets[wb.SheetNames[0]];
     var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+    // Ham degerler (sayi / tarih seri no): Mevlana raporunda tutar ve tarihler gercek hucre degeri
+    var rowsRaw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
 
     if (rows.length < 2){
       finishUploadModal(false, '<div class="line">Excel\'de veri bulunamadi.</div>');
@@ -2071,6 +2125,37 @@ async function handleExcelUpload(file){
     var colIndex = {};
     var missing = [];
     var searchLimit = Math.min(10, rows.length);
+
+    // ---- Sube tespiti: "Sube" sutunu ve icinde MEVLANA varsa Mevlana raporudur, yoksa Merkez.
+    var uploadSube = "MERKEZ";
+    var subeCol = -1;
+    for (var sh = 0; sh < searchLimit; sh++){
+      var hdrs = rows[sh];
+      var sc = -1;
+      for (var q0 = 0; q0 < hdrs.length; q0++){
+        var nh = normalizeHeader(hdrs[q0]);
+        if (nh === "şube" || nh === "sube") { sc = q0; break; }
+      }
+      if (sc !== -1 && findCol(hdrs, ["ünvan", "unvan"]) !== -1 && findCol(hdrs, ["borç bak", "borc bak"]) !== -1 && findCol(hdrs, ["son tah"]) !== -1){
+        var subeValues = {};
+        for (var sr = sh + 1; sr < rowsRaw.length; sr++){
+          var sv = (rowsRaw[sr][sc] || "").toString().trim().toUpperCase();
+          if (sv) subeValues[sv] = true;
+        }
+        if (!subeValues["MEVLANA"]){
+          finishUploadModal(false, '<div class="line">Excel\'de "Sube" sutunu var ama icinde MEVLANA yok (bulunan: <b>' + escapeHtml(Object.keys(subeValues).join(", ") || "-") + '</b>).</div>');
+          return;
+        }
+        uploadSube = "MEVLANA";
+        subeCol = sc;
+        headerRowIndex = sh;
+        colIndex = { "Ünvan": findCol(hdrs, ["ünvan", "unvan"]), "Borç Bak.": findCol(hdrs, ["borç bak", "borc bak"]), "Son Tah. Tarihi": findCol(hdrs, ["son tah"]), "Cari Kategori 1": -1, "Cari Kategori 5": -1 };
+        break;
+      }
+    }
+    var isMev = (uploadSube === "MEVLANA");
+
+    if (!isMev)
     for (var hr = 0; hr < searchLimit; hr++){
       var testHeaders = rows[hr];
       var testColIndex = {};
@@ -2111,7 +2196,7 @@ async function handleExcelUpload(file){
     var kodCol = findCol(headers, ["kod"]); // zorunlu degil, varsa daha saglam id icin kullanilir
 
     // bu yuklemeden hemen onceki durumun anlik goruntusu (once/sonra kiyaslari icin)
-    var cariSnapshotAtStart = cariler.slice();
+    var cariSnapshotAtStart = cariler.filter(function(c){ return cariSube(c) === uploadSube; });
     var beforeTotals = {};
     cariSnapshotAtStart.forEach(function(c){
       if (!c.plaka) return;
@@ -2133,21 +2218,24 @@ async function handleExcelUpload(file){
 
     for (var i = headerRowIndex + 1; i < rows.length; i++){
       var r = rows[i];
+      var rr = rowsRaw[i] || [];
+      if (isMev && (rr[subeCol] || "").toString().trim().toUpperCase() !== "MEVLANA") continue;
       var nm = (r[unvanCol] || "").toString().trim();
       if (!nm) continue;
 
       var kod = kodCol !== -1 ? (r[kodCol] || "").toString().trim() : "";
-      var kategori1 = (r[kategori1Col] || "").toString().trim();
-      var plaka = (r[plakaCol] || "").toString().trim();
-      var debt = parseNumber(r[debtCol]);
-      var sonTahTarihi = (r[sonTahCol] || "").toString().trim();
-      var id = kod ? docIdFor(kod) : docIdFor(nm);
+      var kategori1 = isMev ? "" : (r[kategori1Col] || "").toString().trim();
+      var plaka = isMev ? "" : (r[plakaCol] || "").toString().trim();
+      var debt = isMev ? (typeof rr[debtCol] === "number" ? rr[debtCol] : parseNumber(rr[debtCol])) : parseNumber(r[debtCol]);
+      var sonTahTarihi = isMev ? excelDateToTR(rr[sonTahCol]) : (r[sonTahCol] || "").toString().trim();
+      // Mevlana carileri ayri belge kimligi kullanir (kod cakismasini onlemek icin MEV_ oneki)
+      var id = isMev ? docIdFor("MEV_" + (kod || nm)) : (kod ? docIdFor(kod) : docIdFor(nm));
       newIds[id] = true;
       grandDebtTotal += debt;
 
       var updateData = {
         name: nm, kod: kod, kategori1: kategori1, plaka: plaka, debt: debt,
-        sonTahTarihi: sonTahTarihi,
+        sonTahTarihi: sonTahTarihi, sube: uploadSube,
         aktif: true, updatedAt: serverTimestamp()
       };
 
@@ -2216,27 +2304,29 @@ async function handleExcelUpload(file){
         var gunlukData = {};
         Object.keys(afterTotals).forEach(function(np){ gunlukData[yeniPlakalar[np]] = afterTotals[np]; });
         gunlukData.toplamBakiye = grandDebtTotal; // plakasi olmayan cariler dahil genel toplam
-        await setDoc(doc(db, GUNLUK_BAKIYE_COLLECTION, todayStr), gunlukData, { merge: true });
+        await setDoc(doc(db, gunlukCol(uploadSube), todayStr), gunlukData, { merge: true });
       } catch (e) { console.error("[cariTakip] gunluk bakiye yazilamadi:", e); }
       try {
         // "Toplanan Tahsilat" raporu icin cari bazinda gunluk bakiye kaydi (ayni gun icinde
         // birden fazla yukleme olursa, gunun EN SON durumu esas alinir, birikmez).
-        await setDoc(doc(db, GUNLUK_CARI_BAKIYE_COLLECTION, dateStr(new Date())), cariSnapshotToday, { merge: true });
+        await setDoc(doc(db, gunlukCariCol(uploadSube), dateStr(new Date())), cariSnapshotToday, { merge: true });
       } catch (e) { console.error("[cariTakip] gunluk cari bakiye yazilamadi:", e); }
     }
 
     if (metaDocRef){
-      try { await setDoc(metaDocRef, { lastUploadAt: serverTimestamp() }, { merge: true }); }
+      try { var metaPatch = {}; metaPatch[metaUploadField(uploadSube)] = serverTimestamp(); await setDoc(metaDocRef, metaPatch, { merge: true }); }
       catch (e) { console.error("[cariTakip] meta guncellenemedi:", e); }
     }
 
     var summary = "";
+    summary += '<div class="line"><span>Sube</span><b>' + uploadSube + '</b></div>';
     summary += '<div class="line"><span>Islenen cari</span><b>' + count + '</b></div>';
     summary += '<div class="line"><span>Pasife alinan (Excelde artik yok)</span><b>' + toDeactivate.length + '</b></div>';
     if (notesClearedCount > 0) summary += '<div class="line"><span>Yeni tahsilat nedeniyle temizlenen not/tarih</span><b>' + notesClearedCount + '</b></div>';
     if (eklenecekler.length > 0) summary += '<div class="line"><span>Yeni eklenen plaka</span><b>' + eklenecekler.length + '</b></div>';
     if (topPlaka && topCollected > 0) summary += '<div class="line"><span>Bu yuklemede en cok azalan bakiye</span><b>' + escapeHtml(topPlaka) + ': ' + fmtMoney(topCollected) + '</b></div>';
     finishUploadModal(true, summary);
+    if (currentRole === "admin" && uploadSube !== currentSube) setSube(uploadSube); // yuklenen subeye gec
   } catch (err) {
     finishUploadModal(false, '<div class="line">Hata: ' + escapeHtml(err.message) + '</div>');
   }
@@ -2267,10 +2357,12 @@ function initRealtime(){
           dueReadFor: d.dueReadFor || "",
           flagClearedFor: d.flagClearedFor || "",
           ilkGorulme: d.ilkGorulme || "",
+          sube: d.sube || "MERKEZ",
           lastEditedBy: d.lastEditedBy || "", lastEditedAtLabel: fmtTimestamp(d.lastEditedAt)
         });
       });
       setConnStatus("Canli baglanti aktif", true);
+      updateSubeSwitch();
       populateAdminFilters();
       render();
       if (document.getElementById("paymentOverlay").classList.contains("show")) renderPaymentList();
@@ -2317,6 +2409,9 @@ function wireHamburger(){
     if (currentRole !== "admin"){ await customAlert("Toplanan tahsilat sadece yoneticiler icindir.", "Yetki Yok"); return; }
     openToplananTahsilatPanel();
   });
+
+  on("subeMerkezBtn", "click", function(){ setSube("MERKEZ"); });
+  on("subeMevlanaBtn", "click", function(){ setSube("MEVLANA"); });
 
   on("refreshBtn", "click", async function(){
     // Sayfayi yeniden yukle (onbellegi temizleyip en guncel surumu ceker)
@@ -2646,7 +2741,7 @@ function wireAdminFilters(){
     "filterKategori1Btn", "filterKategori1Dropdown", "filterKategori1Options",
     function(){ return filterKategori1Values; },
     function(v){ filterKategori1Values = v; },
-    function(){ return Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); }); }
+    function(){ return Array.from(new Set(branchCariler().map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); }); }
   );
   wireMultiSelectFilter(
     "filterPlakaBtn", "filterPlakaDropdown", "filterPlakaOptions",
@@ -2657,7 +2752,7 @@ function wireAdminFilters(){
 
   on("clearKategori1Btn", "click", function(){
     filterKategori1Values = [];
-    renderMultiSelectOptions("filterKategori1Options", Array.from(new Set(cariler.map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); }), []);
+    renderMultiSelectOptions("filterKategori1Options", Array.from(new Set(branchCariler().map(function(c){ return c.kategori1; }).filter(Boolean))).sort(function(a, b){ return a.localeCompare(b, "tr"); }), []);
     updateFilterButtonLabels();
     render();
   });
@@ -2726,6 +2821,10 @@ function logout(){
 }
 
 function applyRoleUI(){
+  // Sube: yonetici kayitli secimini hatirlar, plasiyer sadece Merkez gorur
+  var savedSube = "MERKEZ";
+  if (currentRole === "admin"){ try { savedSube = localStorage.getItem(SUBE_KEY) || "MERKEZ"; } catch (e) {} }
+  setSube(savedSube, true);
   var uploadRow = document.getElementById("uploadRow");
   var userInfo = document.getElementById("userInfo");
   var reqCols = document.getElementById("requiredCols");
