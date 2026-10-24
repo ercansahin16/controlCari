@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.9.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.10.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -1000,7 +1000,6 @@ function refreshSearchDropdown(){
 }
 
 var activeQuickFilter = null; // null | "flagged" | "noted" | "duetoday" | "overdue"
-var sortByHighestDebt = false; // "En Yuksek Tutar" cipi: tum cariler buyukten kucuge
 var sortByOldestCollection = false; // "En Eski Tahsilat" chip'i ile acilir/kapanir
 
 function render(){
@@ -1023,10 +1022,7 @@ function render(){
   } else if (filtered.length === 0){
     list.innerHTML = '<div class="empty">Sonuc bulunamadi.</div>';
   } else {
-    if (sortByHighestDebt){
-      // En yuksek tutar: TUM cariler buyukten kucuge
-      filtered.sort(function(a, b){ return (b.debt || 0) - (a.debt || 0); });
-    } else if (sortByOldestCollection){
+    if (sortByOldestCollection){
       filtered.sort(function(a, b){
         var da = parseTRDate(a.sonTahTarihi), db = parseTRDate(b.sonTahTarihi);
         if (!da && !db) return 0;
@@ -1095,9 +1091,7 @@ function render(){
   document.getElementById("sumOverdue").textContent = visible.filter(function(c){ return isOverduePast(c); }).length;
   var oldestDays = maxDaysSinceCollection(visible);
   document.getElementById("sumOldestDays").textContent = oldestDays === null ? "-" : oldestDays;
-  var maxDebt = visible.reduce(function(m, c){ return Math.max(m, c.debt || 0); }, 0);
-  document.getElementById("sumTopDebt").textContent = visible.length ? fmtMoney(maxDebt) : "-";
-  document.getElementById("chipTop").classList.toggle("active", sortByHighestDebt);
+
 
   document.getElementById("chipNoted").classList.toggle("active", activeQuickFilter === "noted");
   document.getElementById("chipFlag").classList.toggle("active", activeQuickFilter === "flagged");
@@ -2668,8 +2662,7 @@ function wireEvents(){
   on("chipNoted", "click", function(){ activeQuickFilter = activeQuickFilter === "noted" ? null : "noted"; render(); });
   on("chipDueToday", "click", function(){ activeQuickFilter = activeQuickFilter === "duetoday" ? null : "duetoday"; render(); });
   on("chipOverdue", "click", function(){ activeQuickFilter = activeQuickFilter === "overdue" ? null : "overdue"; render(); });
-  on("chipTop", "click", function(){ sortByHighestDebt = !sortByHighestDebt; if (sortByHighestDebt) sortByOldestCollection = false; render(); });
-  on("chipOldestSort", "click", function(){ sortByOldestCollection = !sortByOldestCollection; if (sortByOldestCollection) sortByHighestDebt = false; render(); });
+  on("chipOldestSort", "click", function(){ sortByOldestCollection = !sortByOldestCollection; render(); });
   on("fileInput", "change", function(e){ var f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; });
   on("uploadCloseBtn", "click", function(){ document.getElementById("uploadOverlay").classList.remove("show"); });
   wireCalendar();
