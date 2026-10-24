@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.0.11.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.0.12.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -1046,6 +1046,7 @@ function render(){
       html += '    <div class="tags">';
       if (c.kategori1) html += '<span class="tag">' + escapeHtml(c.kategori1) + '</span>';
       html += '<span class="tag">' + escapeHtml(c.plaka || "Plaka yok") + '</span>';
+      if (!c.sonTahTarihi) html += '<span class="tag new-tag">YENI CARI</span>';
       if (c.sonTahTarihi){
         var dsc = daysSinceCollection(c);
         html += '<span class="tag">Son tahsilat: ' + escapeHtml(c.sonTahTarihi) + (dsc !== null ? ' (' + dsc + ' gun)' : '') + '</span>';
@@ -1675,7 +1676,7 @@ function isAutoFlagged(c){
   // Kullanici sorunlu dugmesini elle kapattiysa, o tahsilat tarihi degisene kadar
   // otomatik sorunlu sayilmaz (yeni tahsilat gelirse kural tekrar isler).
   if (c.flagClearedFor && c.flagClearedFor === (c.sonTahTarihi || "-")) return false;
-  if (!c.sonTahTarihi) return true; // hic tahsilat tarihi yok -- otomatik sorunlu
+  if (!c.sonTahTarihi) return false; // hic tahsilat tarihi yok = yeni cari, otomatik sorunlu SAYILMAZ
   var days = daysSinceCollection(c);
   return days !== null && days >= AUTO_FLAG_DAYS;
 }
