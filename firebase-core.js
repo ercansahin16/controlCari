@@ -4,13 +4,12 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 import { getFirestore, enableMultiTabIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBWj53RpZd_xcWGD-ZLIyXBYz8H9MehM7Y",
-  authDomain: "dosya01-7a585.firebaseapp.com",
-  databaseURL: "https://dosya01-7a585-default-rtdb.firebaseio.com",
-  projectId: "dosya01-7a585",
-  storageBucket: "dosya01-7a585.firebasestorage.app",
-  messagingSenderId: "502419176600",
-  appId: "1:502419176600:web:d4304f2a0bfc30d03ce4ed"
+  apiKey: "AIzaSyBY73WR7wSypPln0QeQzFeXM7jyJzCoWWQ",
+  authDomain: "carikontrol-22155.firebaseapp.com",
+  projectId: "carikontrol-22155",
+  storageBucket: "carikontrol-22155.firebasestorage.app",
+  messagingSenderId: "830194055469",
+  appId: "1:830194055469:web:343b0663162bdd97befba4"
 };
 
 const app = initializeApp(firebaseConfig);
