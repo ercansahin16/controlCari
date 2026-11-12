@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.1.2.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.1.3.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -72,6 +72,9 @@ const SUBE_KEY = "ledsaha_sube";
 const SUBELER = ["MERKEZ", "MEVLANA"];
 var currentSube = "MERKEZ"; // yonetici hangi subeyi goruntuluyor (plasiyer her zaman MERKEZ) // her takvim gunu icin cariId -> {n,d,k,p} (Toplanan Tahsilat raporu icin)
 const PLAKA_YOK = "PLAKA_YOK";
+const PLAKA_MEVLANA = "MEVLANA"; // sanal plasiyer: Mevlana subesinin carilerini gorur
+function plakaSecenekleri(){ return plakaListesi.concat([PLAKA_MEVLANA]); }
+function isMevlanaPlasiyer(){ return currentRole === "sales" && currentPlakalar[0] === PLAKA_MEVLANA; }
 
 // Excelde bulunmasi zorunlu (sadece bunlar) kolonlar
 const REQUIRED_COLUMNS = [
@@ -368,9 +371,9 @@ function metaUploadField(sube){ return sube === "MEVLANA" ? "lastUploadAtMevlana
 
 function setSube(sube, silent){
   if (SUBELER.indexOf(sube) === -1) sube = "MERKEZ";
-  if (currentRole !== "admin") sube = "MERKEZ";
+  if (currentRole !== "admin") sube = isMevlanaPlasiyer() ? "MEVLANA" : "MERKEZ";
   currentSube = sube;
-  try { localStorage.setItem(SUBE_KEY, sube); } catch (e) {}
+  if (currentRole === "admin"){ try { localStorage.setItem(SUBE_KEY, sube); } catch (e) {} }
   lastUploadAt = lastUploadAtBySube[sube] || null;
   filterKategori1Values = []; filterPlakaValues = [];
   var box = document.getElementById("searchBox");
@@ -638,6 +641,9 @@ function populateSalesDropdown(){
     opt.value = p; opt.textContent = p + (soforAdi(p) ? " - " + soforAdi(p) : "");
     sel.appendChild(opt);
   });
+  var mevOpt = document.createElement("option");
+  mevOpt.value = PLAKA_MEVLANA; mevOpt.textContent = "Mevlana" + (soforAdi(PLAKA_MEVLANA) ? " - " + soforAdi(PLAKA_MEVLANA) : "");
+  sel.appendChild(mevOpt);
   var yokOpt = document.createElement("option");
   yokOpt.value = PLAKA_YOK; yokOpt.textContent = "Plaka Yok";
   sel.appendChild(yokOpt);
@@ -690,13 +696,10 @@ function renderPlakaManagementList(){
 function renderSoforList(){
   var container = document.getElementById("soforList");
   if (!container) return;
-  if (plakaListesi.length === 0){
-    container.innerHTML = '<div class="empty" style="padding:16px;">Once Plaka Yonetiminden plaka ekleyin.</div>';
-    return;
-  }
+  var secenekler = plakaSecenekleri();
   var html = "";
-  for (var i = 0; i < plakaListesi.length; i++){
-    var p = plakaListesi[i];
+  for (var i = 0; i < secenekler.length; i++){
+    var p = secenekler[i];
     html += '<div class="sofor-item">';
     html += '  <span class="plaka">' + escapeHtml(p) + '</span>';
     html += '  <input type="text" value="' + escapeAttr(soforAdi(p)) + '" data-plaka="' + escapeAttr(p) + '" placeholder="Sofor adi" />';
@@ -881,7 +884,7 @@ function getSearchPool(){
   var active = cariler.filter(function(c){ return c.aktif && inBranch(c); });
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
-    active = active.filter(function(c){
+    if (!isMevlanaPlasiyer()) active = active.filter(function(c){
       if (wantYok) return !c.plaka;
       if (!c.plaka) return false;
       return currentPlakalar.indexOf(normalizePlate(c.plaka)) !== -1;
@@ -899,7 +902,7 @@ function getVisibleCariler(ignoreLimit){
   var base = active;
   if (currentRole === "sales"){
     var wantYok = currentPlakalar.indexOf(PLAKA_YOK) !== -1;
-    base = active.filter(function(c){
+    if (!isMevlanaPlasiyer()) base = active.filter(function(c){
       if (wantYok) return !c.plaka;
       if (!c.plaka) return false;
       return currentPlakalar.indexOf(normalizePlate(c.plaka)) !== -1;
@@ -1068,7 +1071,7 @@ function render(){
 
   if (listBase.length === 0){
     list.innerHTML = currentRole === "sales"
-      ? '<div class="empty">Bu plakaya atanmis cari bulunamadi.</div>'
+      ? '<div class="empty">Bu plasiyere atanmis cari bulunamadi.</div>'
       : '<div class="empty">Henuz veri yok.<br/>Yukaridan bir Excel dosyasi yukleyin.</div>';
   } else if (filtered.length === 0){
     list.innerHTML = '<div class="empty">Sonuc bulunamadi.</div>';
@@ -2537,7 +2540,7 @@ function wireHamburger(){
     if (sel !== "custom") return;
     if (box.getAttribute("data-built") !== String(plakaListesi.length)){
       var html = "";
-      plakaListesi.forEach(function(p){
+      plakaSecenekleri().forEach(function(p){
         html += '<label class="dp-item"><input type="checkbox" value="' + escapeAttr(normalizePlate(p)) + '" /> ' + escapeHtml(p) + (soforAdi(p) ? ' - ' + escapeHtml(soforAdi(p)) : '') + '</label>';
       });
       box.innerHTML = html || '<div class="sub">Tanimli plaka yok.</div>';
@@ -2844,7 +2847,7 @@ function applyRoleUI(){
     clearAllBtn.classList.remove("show");
     clearBtn.classList.add("hidden");
     reqCols.textContent = "";
-    var plakaLabel = currentPlakalar[0] === PLAKA_YOK ? "Plaka Yok" : (currentPlakalar[0] || "");
+    var plakaLabel = currentPlakalar[0] === PLAKA_YOK ? "Plaka Yok" : (currentPlakalar[0] === PLAKA_MEVLANA ? "Mevlana" : (currentPlakalar[0] || ""));
     var isim = currentPlakalar[0] === PLAKA_YOK ? "" : soforAdi(plakaLabel);
     userInfo.innerHTML = 'Plasiyer: <b>' + escapeHtml(plakaLabel) + (isim ? " - " + escapeHtml(isim) : "") + '</b>';
   }
