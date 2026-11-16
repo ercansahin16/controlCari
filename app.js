@@ -5,7 +5,7 @@ import { db, app } from "./firebase-core.js";
 import {
   collection, doc, setDoc, deleteDoc, onSnapshot, getDoc, getDocs,
   serverTimestamp, arrayUnion, arrayRemove,
-  query, orderBy, limit
+  query, orderBy, limit, where, Timestamp
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js";
 
@@ -58,7 +58,7 @@ const CARI_COLLECTION = "cariler";
 const HISTORY_COLLECTION = "gecmis";
 const PLAKA_DOC = { col: "config", id: "plakalar" };
 const META_DOC = { col: "config", id: "meta" };
-const APP_VERSION = "1.1.3.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
+const APP_VERSION = "1.1.4.0"; // her guncellemede artirilir (version.json ile AYNI olmali)
 const SOFOR_DOC = { col: "config", id: "soforler" };
 const YETKI_DOC = { col: "config", id: "plasiyerYetki" }; // plaka -> true: plasiyer not/tarih/sorunlu duzenleyebilir (varsayilan: kapali)
 const AYARLAR_DOC = { col: "config", id: "ayarlar" };
@@ -541,6 +541,45 @@ function renderUserManagementList(){
 }
 
 function dateStr(d){ return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+
+
+// ---------- Eski kayit temizligi (7 gunden eskileri sil) ----------
+const RETENTION_DAYS = 7;
+const CLEANUP_KEY = "ledsaha_cleanup_day";
+async function cleanupOldData(force){
+  if (currentRole !== "admin") return;
+  var today = dateStr(new Date());
+  if (!force){
+    try { if (localStorage.getItem(CLEANUP_KEY) === today) return; } catch (e) {}
+  }
+  var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - RETENTION_DAYS); cutoff.setHours(0,0,0,0);
+  var cutoffISO = dateStr(cutoff);
+  var silinen = 0;
+  try {
+    // Gunluk bakiye kayitlari: belge adi tarih (YYYY-MM-DD)
+    var cols = ["gunluk_bakiye", "gunluk_cari_bakiye", "gunluk_bakiye_mevlana", "gunluk_cari_bakiye_mevlana"];
+    for (var i = 0; i < cols.length; i++){
+      var snap = await getDocs(collection(db, cols[i]));
+      for (var j = 0; j < snap.docs.length; j++){
+        var id = snap.docs[j].id;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(id) && id < cutoffISO){ await deleteDoc(snap.docs[j].ref); silinen++; }
+      }
+    }
+    // Duzenleme gecmisi ve duyurular: zaman damgasina gore
+    var ts = Timestamp.fromDate(cutoff);
+    var pairs = [[HISTORY_COLLECTION, "editedAt"], ["duyurular", "sentAt"]];
+    for (var k = 0; k < pairs.length; k++){
+      var more = true;
+      while (more){
+        var qs = await getDocs(query(collection(db, pairs[k][0]), where(pairs[k][1], "<", ts), limit(300)));
+        for (var m = 0; m < qs.docs.length; m++){ await deleteDoc(qs.docs[m].ref); silinen++; }
+        more = qs.docs.length === 300;
+      }
+    }
+    try { localStorage.setItem(CLEANUP_KEY, today); } catch (e) {}
+    console.log("[cariTakip] eski kayit temizligi: " + silinen + " kayit silindi (>" + RETENTION_DAYS + " gun)");
+  } catch (e) { console.error("[cariTakip] eski kayit temizligi basarisiz:", e); }
+}
 
 async function openBasariPanel(){
   document.getElementById("basariOverlay").classList.add("show");
@@ -2321,6 +2360,7 @@ async function handleExcelUpload(file){
       catch (e) { console.error("[cariTakip] meta guncellenemedi:", e); }
     }
 
+    cleanupOldData(true);
     var summary = "";
     summary += '<div class="line"><span>Sube</span><b>' + uploadSube + '</b></div>';
     summary += '<div class="line"><span>Islenen cari</span><b>' + count + '</b></div>';
@@ -2940,6 +2980,7 @@ function unlockApp(){
   if (!appWired){ wireEvents(); appWired = true; }
   initRealtime();
   if (currentRole === "admin") watchHistory();
+  if (currentRole === "admin") setTimeout(function(){ cleanupOldData(false); }, 8000);
   checkNightLock();
   if (nightLockInterval) clearInterval(nightLockInterval);
   nightLockInterval = setInterval(checkNightLock, 60 * 1000);
