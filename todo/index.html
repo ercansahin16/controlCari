@@ -20,8 +20,9 @@
 }
 body.light{--bg:#f1f5f9;--card:#fff;--card2:#f8fafc;--line:#e2e8f0;--text:#0f172a;--muted:#64748b}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{overscroll-behavior:none;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px}
+html,body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px}
 button,input,select,textarea{font:inherit;color:inherit}
+input,textarea{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 button{cursor:pointer;border:0;background:none}
 .hidden{display:none!important}
 
@@ -427,7 +428,6 @@ function taskHTML(t) {
   ].filter(Boolean).join("");
   const dn = isDone(t);
   return `<div class="task p${t.priority} ${dn ? "done" : ""}" data-id="${t.id}">
-    <button class="chk" data-chk="${t.id}" aria-label="Tamamla">${dn ? "✓" : ""}</button>
     <div class="t-body"><div class="t-title">${esc(t.title)}</div>${meta ? `<div class="t-meta">${meta}</div>` : ""}</div>
   </div>`;
 }
@@ -739,7 +739,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.18-1702";
+const APP_VERSION = "2026.11.18-1930";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
