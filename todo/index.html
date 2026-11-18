@@ -191,6 +191,7 @@ textarea.inp{min-height:80px;resize:vertical}
   <button class="menu-item" id="newListBtn">➕ <span>Yeni liste</span></button>
   <div class="group-title"><span>Ayarlar</span></div>
   <button class="menu-item" id="installBtn">📲 <span>Telefon ana ekranına ekle</span></button>
+  <button class="menu-item" id="updateBtn">⬇️ <span>Güncellemeleri denetle</span><span class="cnt" id="verLbl"></span></button>
   <button class="menu-item" id="themeBtn">🌓 <span>Açık / koyu tema</span></button>
   <button class="menu-item" id="clearDoneBtn">🧹 <span>Tamamlananları temizle</span></button>
   <button class="menu-item" id="exportBtn">💾 <span>Yedek indir (JSON)</span></button>
@@ -731,6 +732,24 @@ $("#installBtn").onclick = async () => {
        <p class="sub">Seçenek görünmezse sayfayı bir kez yenileyip tekrar dene.</p>`;
   openSheet("#installSheet");
 };
+
+/* ---------- Güncelleme denetimi ----------
+   Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
+const APP_VERSION = "2026.11.18-1656";
+$("#verLbl").textContent = "v" + APP_VERSION;
+async function checkUpdate(silent) {
+  try {
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
+    const { v } = await r.json();
+    if (v && v !== APP_VERSION) {
+      if (silent) return toast("🆕 Yeni sürüm hazır", "Güncelle", () => reloadFresh(v));
+      toast("🆕 Yeni sürüm yükleniyor…"); setTimeout(() => reloadFresh(v), 600);
+    } else if (!silent) toast("✅ Uygulama güncel (v" + APP_VERSION + ")");
+  } catch (e) { if (!silent) toast("İnternet yok, denetlenemedi"); }
+}
+function reloadFresh(v) { location.replace(location.pathname + "?v=" + encodeURIComponent(v)); }
+$("#updateBtn").onclick = () => { closeSheets(); checkUpdate(false); };
+setTimeout(() => checkUpdate(true), 3000);   // açılışta sessiz kontrol
 
 /* ---------- Liste düzenleyici ---------- */
 function openList(id) {
