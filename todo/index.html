@@ -288,7 +288,7 @@ function parseQuick(str) {
     let diff = (target - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + diff); due = ymd(d); return a; });
   if (time && !due) due = today();
   if (!due && view === "today") due = today();
-  if (view === "daily") return { title: title.replace(/\s+/g, " ").trim(), due: "", time, priority, tags, listId: "", daily: true, streak: 0, lastDone: "" };
+  if (view === "daily") return { title: title.replace(/\s+/g, " ").trim(), due: "", time, priority, tags, listId: "", daily: true, dailyDone: false };
   if (view === "important" && !priority) priority = 3;
   return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId };
 }
@@ -317,7 +317,7 @@ const VIEWS = {
   nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.daily && !t.done && !t.due },
   done:      { name: "Tamamlanan",  short: "Biten", icon: "✅", f: t => !t.daily && t.done },
 };
-const doneToday = t => t.daily && t.lastDone === today();
+const doneToday = t => t.daily && (t.dailyDone ?? !!t.lastDone);   // günlükler sabit: gece sıfırlanmaz
 const isDone = t => t.daily ? doneToday(t) : t.done;
 const vcount = k => tasks.filter(VIEWS[k].cnt || VIEWS[k].f).length;
 const currentListId = () => view.startsWith("list:") ? view.slice(5) : "";
@@ -372,7 +372,7 @@ function render() {
   let groups;
   if (q || view === "done" || sortBy !== "smart") groups = [["", items]];
   else if (view === "daily") {
-    groups = [["Bugün yapılacak", items.filter(t => !doneToday(t))], ["Bugün tamamlandı", items.filter(doneToday)]];
+    groups = [["Yapılacak", items.filter(t => !doneToday(t))], ["Tamamlandı", items.filter(doneToday)]];
   } else if (view === "today") {
     const late = items.filter(t => t.due < today()), tod = items.filter(t => t.due === today());
     groups = [["Gecikmiş", late], ["Bugün", tod]];
@@ -394,7 +394,6 @@ function taskHTML(t) {
   const d = dueLabel(t), l = lists.find(x => x.id === t.listId);
   const subs = t.subtasks || [], sd = subs.filter(s => s.d).length;
   const meta = [
-    t.daily && (t.streak || 0) > 0 && `<span class="streak">🔥 ${t.streak} gün</span>`,
     !t.daily && d && `<span class="${d.cls}">📅 ${esc(d.txt)}</span>`,
     t.repeat && t.repeat !== "none" && `<span>🔁 ${REP[t.repeat]}</span>`,
     subs.length && `<span>☑️ ${sd}/${subs.length}</span>`,
@@ -446,14 +445,9 @@ async function toggleDone(id) {
   const t = tasks.find(x => x.id === id); if (!t) return;
   const r = ref("tasks", id);
   if (t.daily) {
-    if (doneToday(t)) {   // bugünkü işareti geri al
-      await updateDoc(r, { lastDone: t.prevDone || "", streak: Math.max(0, (t.streak || 1) - 1), updatedAt: serverTimestamp() }).catch(fbErr);
-    } else {
-      const streak = t.lastDone === addDays(today(), -1) ? (t.streak || 0) + 1 : 1;
-      await updateDoc(r, { prevDone: t.lastDone || "", lastDone: today(), streak,
-        subtasks: (t.subtasks || []).map(s => ({ ...s, d: false })), updatedAt: serverTimestamp() }).catch(fbErr);
-      navigator.vibrate?.(25); toast(streak > 1 ? `🔥 ${streak} gündür devam!` : "✅ Bugün tamamlandı");
-    }
+    const nv = !doneToday(t);
+    await updateDoc(r, { dailyDone: nv, lastDone: "", updatedAt: serverTimestamp() }).catch(fbErr);
+    if (nv) { navigator.vibrate?.(25); toast("✅ Tamamlandı", "Geri al", () => updateDoc(r, { dailyDone: false })); }
     return;
   }
   if (!t.done && t.repeat && t.repeat !== "none") {
@@ -474,7 +468,7 @@ async function toggleDaily(id) {
     await updateDoc(r, { daily: false, updatedAt: serverTimestamp() }).catch(fbErr);
     toast("Günlükten çıkarıldı", "Geri al", () => updateDoc(r, { daily: true }));
   } else {
-    await updateDoc(r, { daily: true, done: false, doneAt: null, streak: t.streak || 0, lastDone: t.lastDone || "", updatedAt: serverTimestamp() }).catch(fbErr);
+    await updateDoc(r, { daily: true, done: false, doneAt: null, dailyDone: false, updatedAt: serverTimestamp() }).catch(fbErr);
     toast("🔄 Günlük görevlere taşındı", "Git", () => setView("daily"));
   }
   navigator.vibrate?.(15);
@@ -572,7 +566,7 @@ $("#menuBtn").onclick = () => {
   const late = nd.filter(t => !t.done && t.due && t.due < today()).length;
   const dl = tasks.filter(t => t.daily), dlDone = dl.filter(doneToday).length;
   $("#stats").innerHTML = `<div><b>${open}</b><small>Açık</small></div><div><b style="color:var(--bad)">${late}</b><small>Gecikmiş</small></div><div><b style="color:var(--ok)">${done}</b><small>Biten</small></div>`
-    + (dl.length ? `<div style="grid-column:1/-1"><b style="color:var(--warn)">${dlDone} / ${dl.length}</b><small>Bugünkü günlük görevler</small></div>` : "");
+    + (dl.length ? `<div style="grid-column:1/-1"><b style="color:var(--warn)">${dlDone} / ${dl.length}</b><small>Günlük görevler tamamlanan</small></div>` : "");
   $("#menuViews").innerHTML = Object.entries(VIEWS).map(([k, v]) =>
     `<button class="menu-item" data-view="${k}">${v.icon} <span>${v.name}</span><span class="cnt">${vcount(k)}</span></button>`).join("");
   $("#menuLists").innerHTML = lists.map(l =>
