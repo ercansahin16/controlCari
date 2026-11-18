@@ -41,9 +41,8 @@ header{position:sticky;top:0;z-index:20;background:var(--bg);padding:calc(var(--
 .sub{color:var(--muted);font-size:13px;margin:4px 0 10px}
 .search{display:flex;gap:8px}
 .search input{flex:1;margin:0}
-.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 0 4px;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chip{padding:7px 13px;border-radius:999px;background:var(--card);white-space:nowrap;font-size:14px;border:1px solid transparent}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:10px 0 4px}
+.chip{padding:8px 4px;border-radius:12px;background:var(--card);white-space:nowrap;font-size:13px;border:1px solid transparent;overflow:hidden;text-overflow:ellipsis;text-align:center}
 .chip.on{background:var(--acc);color:#fff}
 .chip .n{opacity:.7;margin-left:4px;font-size:12px}
 
@@ -316,7 +315,7 @@ const VIEWS = {
   important: { name: "Önemli",      icon: "⭐", f: t => !t.daily && !t.done && t.priority === 3 },
   all:       { name: "Tümü",        icon: "📋", f: t => !t.daily && !t.done },
   nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.daily && !t.done && !t.due },
-  done:      { name: "Tamamlanan",  icon: "✅", f: t => !t.daily && t.done },
+  done:      { name: "Tamamlanan",  short: "Biten", icon: "✅", f: t => !t.daily && t.done },
 };
 const doneToday = t => t.daily && t.lastDone === today();
 const isDone = t => t.daily ? doneToday(t) : t.done;
@@ -412,7 +411,7 @@ function taskHTML(t) {
 }
 function renderChips() {
   const base = ["today", "daily", "upcoming", "important", "all", "done"].map(k =>
-    `<button class="chip ${view === k ? "on" : ""}" data-view="${k}">${VIEWS[k].icon} ${VIEWS[k].name}<span class="n">${vcount(k)}</span></button>`);
+    `<button class="chip ${view === k ? "on" : ""}" data-view="${k}">${VIEWS[k].icon} ${VIEWS[k].short || VIEWS[k].name}<span class="n">${vcount(k)}</span></button>`);
   const ls = lists.map(l => {
     const n = tasks.filter(t => !t.daily && !t.done && t.listId === l.id).length;
     return `<button class="chip ${view === "list:" + l.id ? "on" : ""}" data-view="list:${l.id}">${esc(l.icon || "📁")} ${esc(l.name)}<span class="n">${n}</span></button>`;
