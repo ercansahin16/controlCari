@@ -17,15 +17,15 @@ Telefon için tasarlanmış kişisel yapılacaklar listesi. Tek `index.html` + F
 
 ## Veri yapısı (Firestore)
 ```
-users/{uid}/lists/{listId}  → name, icon, color, order
-users/{uid}/tasks/{taskId}  → title, note, due, time, priority, listId,
-                              repeat, tags[], subtasks[{t,d}], done, doneAt
+todo/ercan/lists/{listId}  → name, icon, color, order
+todo/ercan/tasks/{taskId}  → title, note, due, time, priority, listId,
+                             repeat, tags[], subtasks[{t,d}], done, doneAt
 ```
 
 ## Kurulum
-1. Firebase Console → **Authentication** → Sign-in method → **E-posta/Şifre** ve/veya **Google**'ı aç.
-   E-posta ile girecekseniz Users sekmesinden kendi kullanıcınızı ekleyin.
-2. **Firestore Database** oluşturun → **Rules** sekmesine `firestore.rules` içeriğini yapıştırıp **Publish**.
-3. Authentication → Settings → **Authorized domains**'e yayın adresini ekleyin
-   (ör. `ercansahin16.github.io`).
-4. GitHub → Settings → Pages → Branch: `main` / root → Save.
+Giriş ekranı yoktur; sayfa açılınca otomatik anonim oturum açılır.
+1. Firebase Console → **Authentication** → Sign-in method → **Anonymous**'u aç.
+2. **Firestore Database** → **Rules** sekmesine `firestore.rules` içeriğini yapıştırıp **Publish**.
+3. Authentication → Settings → **Authorized domains**'e `ledsaha.com` ve `www.ledsaha.com` ekle.
+
+Yayın adresi: https://www.ledsaha.com/todo/

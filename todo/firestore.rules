@@ -2,10 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Giriş ekranı yok: sayfa otomatik anonim oturum açar.
     function signedIn() { return request.auth != null; }
-    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
 
-    // Görev doğrulaması: zorunlu alanlar ve makul boyutlar
     function validTask(d) {
       return d.title is string && d.title.size() > 0 && d.title.size() <= 500
         && d.done is bool
@@ -19,22 +18,19 @@ service cloud.firestore {
       return d.name is string && d.name.size() > 0 && d.name.size() <= 100;
     }
 
-    // Her kullanıcı yalnızca kendi verisine erişir
-    match /users/{uid} {
-      allow read, write: if isOwner(uid);
-
+    match /todo/{owner} {
       match /tasks/{taskId} {
-        allow read, delete: if isOwner(uid);
-        allow create, update: if isOwner(uid) && validTask(request.resource.data);
+        allow read, delete: if signedIn();
+        allow create, update: if signedIn() && validTask(request.resource.data);
       }
-
       match /lists/{listId} {
-        allow read, delete: if isOwner(uid);
-        allow create, update: if isOwner(uid) && validList(request.resource.data);
+        allow read, delete: if signedIn();
+        allow create, update: if signedIn() && validList(request.resource.data);
       }
     }
 
-    // Geri kalan her şey kapalı
+    // NOT: muhtelif123 projesindeki diğer uygulamaların kuralları da
+    // buraya eklenmeli, yoksa aşağıdaki satır onları kapatır.
     match /{document=**} {
       allow read, write: if false;
     }

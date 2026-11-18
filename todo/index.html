@@ -108,21 +108,8 @@ textarea.inp{min-height:80px;resize:vertical}
 </head>
 <body>
 
-<!-- GİRİŞ -->
-<section id="auth" class="hidden">
-  <div class="auth-box">
-    <h1>✅ Yapılacaklar</h1>
-    <p>Kişisel görev yöneticin</p>
-    <input class="inp" id="email" type="email" placeholder="E-posta" autocomplete="email">
-    <input class="inp" id="pass" type="password" placeholder="Şifre" autocomplete="current-password">
-    <button class="btn" id="loginBtn">Giriş yap</button>
-    <button class="btn ghost" id="googleBtn">Google ile giriş</button>
-    <div class="err" id="authErr"></div>
-  </div>
-</section>
-
 <!-- UYGULAMA -->
-<section id="app" class="hidden">
+<section id="app">
   <header>
     <div class="top">
       <button class="icon-btn" id="menuBtn" aria-label="Menü">☰</button>
@@ -192,7 +179,6 @@ textarea.inp{min-height:80px;resize:vertical}
   <button class="menu-item" id="themeBtn">🌓 <span>Açık / koyu tema</span></button>
   <button class="menu-item" id="clearDoneBtn">🧹 <span>Tamamlananları temizle</span></button>
   <button class="menu-item" id="exportBtn">💾 <span>Yedek indir (JSON)</span></button>
-  <button class="menu-item" id="logoutBtn">🚪 <span>Çıkış yap</span><span class="cnt" id="userMail"></span></button>
 </div>
 
 <!-- LİSTE DÜZENLE -->
@@ -217,7 +203,7 @@ textarea.inp{min-height:80px;resize:vertical}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut }
+import { getAuth, onAuthStateChanged, signInAnonymously }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
   onSnapshot, serverTimestamp, writeBatch }
@@ -305,32 +291,26 @@ function parseQuick(str) {
   return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId };
 }
 
-/* ---------- Auth ---------- */
+/* ---------- Otomatik giriş (anonim) ----------
+   Giriş ekranı yok. Veriler sabit "todo/ercan" yolunda tutulur,
+   böylece telefon / bilgisayar fark etmeksizin aynı liste görünür. */
+const OWNER = "ercan";
+const col = name => collection(db, "todo", OWNER, name);
+const ref = (name, id) => doc(db, "todo", OWNER, name, id);
 onAuthStateChanged(auth, user => {
-  unsubs.forEach(u => u()); unsubs = [];
-  if (!user) { $("#auth").classList.remove("hidden"); $("#app").classList.add("hidden"); return; }
-  uid = user.uid;
-  $("#userMail").textContent = user.email || "";
-  $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
-  unsubs.push(onSnapshot(collection(db, "users", uid, "tasks"), s => { tasks = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, fbErr));
-  unsubs.push(onSnapshot(collection(db, "users", uid, "lists"), s => {
+  if (!user) { signInAnonymously(auth).catch(fbErr); return; }
+  if (uid) return;
+  uid = OWNER;
+  unsubs.push(onSnapshot(col("tasks"), s => { tasks = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, fbErr));
+  unsubs.push(onSnapshot(col("lists"), s => {
     lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render(); }, fbErr));
 });
-function fbErr(e) { console.error(e); toast("Hata: " + (e.code || e.message)); }
-
-$("#loginBtn").onclick = async () => {
-  $("#authErr").textContent = "";
-  try { await signInWithEmailAndPassword(auth, $("#email").value.trim(), $("#pass").value); }
-  catch (e) { $("#authErr").textContent = "Giriş başarısız: " + e.code; }
-};
-$("#pass").addEventListener("keydown", e => e.key === "Enter" && $("#loginBtn").click());
-$("#googleBtn").onclick = async () => {
-  const p = new GoogleAuthProvider();
-  try { await signInWithPopup(auth, p); }
-  catch (e) { if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, p);
-              else $("#authErr").textContent = e.code; }
-};
-$("#logoutBtn").onclick = () => { closeSheets(); signOut(auth); };
+function fbErr(e) {
+  console.error(e);
+  const msg = e.code === "auth/admin-restricted-operation" || e.code === "auth/operation-not-allowed"
+    ? "Firebase'de Anonymous girişi açık değil" : (e.code || e.message);
+  toast("Hata: " + msg);
+}
 
 /* ---------- Görünümler ---------- */
 const VIEWS = {
@@ -451,7 +431,7 @@ $("#quickForm").onsubmit = async e => {
   const raw = $("#quickInput").value.trim(); if (!raw) return;
   const p = parseQuick(raw); if (!p.title) return;
   $("#quickInput").value = "";
-  await addDoc(collection(db, "users", uid, "tasks"), {
+  await addDoc(col("tasks"), {
     ...p, note: "", subtasks: [], repeat: "none", done: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
   }).catch(fbErr);
   if (navigator.vibrate) navigator.vibrate(15);
@@ -459,16 +439,16 @@ $("#quickForm").onsubmit = async e => {
 
 async function toggleDone(id) {
   const t = tasks.find(x => x.id === id); if (!t) return;
-  const ref = doc(db, "users", uid, "tasks", id);
+  const r = ref("tasks", id);
   if (!t.done && t.repeat && t.repeat !== "none") {
     // Tekrarlı görev: bir sonraki tarihe taşı, alt görevleri sıfırla
     const nd = nextDue(t.due && t.due >= today() ? t.due : today(), t.repeat);
-    await updateDoc(ref, { due: nd, subtasks: (t.subtasks || []).map(s => ({ ...s, d: false })), updatedAt: serverTimestamp() }).catch(fbErr);
+    await updateDoc(r, { due: nd, subtasks: (t.subtasks || []).map(s => ({ ...s, d: false })), updatedAt: serverTimestamp() }).catch(fbErr);
     toast(`🔁 Sonraki: ${fmtDate(nd)}`);
     return;
   }
-  await updateDoc(ref, { done: !t.done, doneAt: !t.done ? serverTimestamp() : null, updatedAt: serverTimestamp() }).catch(fbErr);
-  if (!t.done) { navigator.vibrate?.(25); toast("✅ Tamamlandı", "Geri al", () => updateDoc(ref, { done: false, doneAt: null })); }
+  await updateDoc(r, { done: !t.done, doneAt: !t.done ? serverTimestamp() : null, updatedAt: serverTimestamp() }).catch(fbErr);
+  if (!t.done) { navigator.vibrate?.(25); toast("✅ Tamamlandı", "Geri al", () => updateDoc(r, { done: false, doneAt: null })); }
 }
 
 /* ---------- Sheet yönetimi ---------- */
@@ -522,15 +502,15 @@ $("#saveTask").onclick = async () => {
   };
   if (data.time && !data.due) data.due = today();
   closeSheets();
-  if (editing) await updateDoc(doc(db, "users", uid, "tasks", editing.id), data).catch(fbErr);
-  else await addDoc(collection(db, "users", uid, "tasks"), { ...data, done: false, createdAt: serverTimestamp() }).catch(fbErr);
+  if (editing) await updateDoc(ref("tasks", editing.id), data).catch(fbErr);
+  else await addDoc(col("tasks"), { ...data, done: false, createdAt: serverTimestamp() }).catch(fbErr);
 };
 $("#delTask").onclick = async () => {
   if (!editing) return;
   const backup = { ...editing }; delete backup.id;
-  const ref = doc(db, "users", uid, "tasks", editing.id);
-  closeSheets(); await deleteDoc(ref).catch(fbErr);
-  toast("🗑️ Silindi", "Geri al", () => setDoc(ref, backup));
+  const r = ref("tasks", editing.id);
+  closeSheets(); await deleteDoc(r).catch(fbErr);
+  toast("🗑️ Silindi", "Geri al", () => setDoc(r, backup));
 };
 // Uzun basınca yeni boş görev formu (hızlı ekleme alanı)
 let lp; $("#quickInput").addEventListener("touchstart", () => lp = setTimeout(() => openTask(null), 600), { passive: true });
@@ -561,7 +541,7 @@ $("#clearDoneBtn").onclick = async () => {
   const done = tasks.filter(t => t.done); if (!done.length) return toast("Temizlenecek görev yok");
   if (!confirm(`${done.length} tamamlanmış görev silinsin mi?`)) return;
   for (let i = 0; i < done.length; i += 400) {
-    const b = writeBatch(db); done.slice(i, i + 400).forEach(t => b.delete(doc(db, "users", uid, "tasks", t.id))); await b.commit();
+    const b = writeBatch(db); done.slice(i, i + 400).forEach(t => b.delete(ref("tasks", t.id))); await b.commit();
   }
   closeSheets(); toast("🧹 Temizlendi");
 };
@@ -585,16 +565,16 @@ $("#saveList").onclick = async () => {
   const name = $("#lName").value.trim(); if (!name) return $("#lName").focus();
   const data = { name, icon: $("#lIcon").value.trim() || "📁", color: colorDraft };
   closeSheets();
-  if (editingList) await updateDoc(doc(db, "users", uid, "lists", editingList.id), data).catch(fbErr);
-  else { const r = await addDoc(collection(db, "users", uid, "lists"), { ...data, order: lists.length, createdAt: serverTimestamp() }).catch(fbErr); if (r) setView("list:" + r.id); }
+  if (editingList) await updateDoc(ref("lists", editingList.id), data).catch(fbErr);
+  else { const r = await addDoc(col("lists"), { ...data, order: lists.length, createdAt: serverTimestamp() }).catch(fbErr); if (r) setView("list:" + r.id); }
 };
 $("#delList").onclick = async () => {
   if (!editingList) return;
   const inList = tasks.filter(t => t.listId === editingList.id);
   if (!confirm(`"${editingList.name}" silinsin mi?${inList.length ? `\n${inList.length} görev "Liste yok"a taşınacak.` : ""}`)) return;
   const b = writeBatch(db);
-  inList.forEach(t => b.update(doc(db, "users", uid, "tasks", t.id), { listId: "" }));
-  b.delete(doc(db, "users", uid, "lists", editingList.id));
+  inList.forEach(t => b.update(ref("tasks", t.id), { listId: "" }));
+  b.delete(ref("lists", editingList.id));
   await b.commit().catch(fbErr);
   closeSheets(); if (view === "list:" + editingList.id) setView("today");
 };
