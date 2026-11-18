@@ -428,7 +428,6 @@ function taskHTML(t) {
   return `<div class="task p${t.priority} ${dn ? "done" : ""}" data-id="${t.id}">
     <button class="chk" data-chk="${t.id}" aria-label="Tamamla">${dn ? "✓" : ""}</button>
     <div class="t-body"><div class="t-title">${esc(t.title)}</div>${meta ? `<div class="t-meta">${meta}</div>` : ""}</div>
-    <button class="pin ${t.daily ? "on" : ""}" data-pin="${t.id}" aria-label="Günlük görev">🔄</button>
   </div>`;
 }
 function renderChips() {
@@ -447,8 +446,6 @@ $("#q").oninput = render;
 let suppressClick = false;
 $("#list").onclick = e => {
   if (suppressClick) { suppressClick = false; return; }
-  const pn = e.target.closest("[data-pin]");
-  if (pn) return toggleDaily(pn.dataset.pin);
   const c = e.target.closest("[data-chk]");
   if (c) return toggleDone(c.dataset.chk);
   const t = e.target.closest(".task");
@@ -550,7 +547,7 @@ function hlAt(x, y) {
 }
 $("#list").addEventListener("touchstart", e => {
   const card = e.target.closest(".task");
-  if (!card || e.target.closest("[data-chk],[data-pin]") || e.touches.length > 1) return;
+  if (!card || e.target.closest("[data-chk]") || e.touches.length > 1) return;
   const t = tasks.find(x => x.id === card.dataset.id); if (!t) return;
   const p = e.touches[0];
   mv = { task: t, x: p.clientX, y: p.clientY, open: false, hl: null, card };
