@@ -203,8 +203,6 @@ textarea.inp{min-height:80px;resize:vertical}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
   onSnapshot, serverTimestamp, writeBatch }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -220,7 +218,6 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 // Çevrimdışı çalışma: internet yokken de eklenir, gelince senkronlanır
 const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
 
@@ -291,25 +288,18 @@ function parseQuick(str) {
   return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId };
 }
 
-/* ---------- Otomatik giriş (anonim) ----------
-   Giriş ekranı yok. Veriler sabit "todo/ercan" yolunda tutulur,
-   böylece telefon / bilgisayar fark etmeksizin aynı liste görünür. */
+/* ---------- Giriş yok ----------
+   Veriler sabit "todo/ercan" yolunda tutulur; telefon / bilgisayar aynı listeyi görür. */
 const OWNER = "ercan";
 const col = name => collection(db, "todo", OWNER, name);
 const ref = (name, id) => doc(db, "todo", OWNER, name, id);
-onAuthStateChanged(auth, user => {
-  if (!user) { signInAnonymously(auth).catch(fbErr); return; }
-  if (uid) return;
-  uid = OWNER;
-  unsubs.push(onSnapshot(col("tasks"), s => { tasks = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, fbErr));
-  unsubs.push(onSnapshot(col("lists"), s => {
-    lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render(); }, fbErr));
-});
+uid = OWNER;
+unsubs.push(onSnapshot(col("tasks"), s => { tasks = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, fbErr));
+unsubs.push(onSnapshot(col("lists"), s => {
+  lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render(); }, fbErr));
 function fbErr(e) {
   console.error(e);
-  const msg = e.code === "auth/admin-restricted-operation" || e.code === "auth/operation-not-allowed"
-    ? "Firebase'de Anonymous girişi açık değil" : (e.code || e.message);
-  toast("Hata: " + msg);
+  toast("Hata: " + (e.code === "permission-denied" ? "Firestore kuralları yayınlanmamış" : (e.code || e.message)));
 }
 
 /* ---------- Görünümler ---------- */

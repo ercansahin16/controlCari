@@ -23,9 +23,7 @@ todo/ercan/tasks/{taskId}  → title, note, due, time, priority, listId,
 ```
 
 ## Kurulum
-Giriş ekranı yoktur; sayfa açılınca otomatik anonim oturum açılır.
-1. Firebase Console → **Authentication** → Sign-in method → **Anonymous**'u aç.
-2. **Firestore Database** → **Rules** sekmesine `firestore.rules` içeriğini yapıştırıp **Publish**.
-3. Authentication → Settings → **Authorized domains**'e `ledsaha.com` ve `www.ledsaha.com` ekle.
+Giriş ekranı yoktur, Authentication gerekmez.
+1. **Firestore Database** → **Rules** sekmesine `firestore.rules` içeriğini yapıştırıp **Publish**.
 
 Yayın adresi: https://www.ledsaha.com/todo/
