@@ -67,6 +67,13 @@ main{padding:4px 16px calc(110px + var(--safe-b))}
 .pin{width:34px;height:34px;border-radius:10px;flex-shrink:0;font-size:17px;opacity:.35;filter:grayscale(1);margin:-4px -4px -4px 0}
 .pin.on{opacity:1;filter:none;background:var(--card2)}
 .streak{color:var(--warn)}
+.task{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.task.pressing{transform:scale(.97);transition:transform .15s}
+#moveMenu{position:fixed;z-index:70;width:230px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+#moveMenu .mh{font-size:12px;color:var(--muted);padding:6px 10px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#moveMenu button{display:flex;gap:10px;align-items:center;width:100%;padding:11px 10px;border-radius:10px;text-align:left;font-size:15px}
+#moveMenu button.hl{background:var(--acc);color:#fff}
+#moveMenu button.cur{opacity:.4}
 .empty{text-align:center;color:var(--muted);padding:60px 20px}
 .empty div{font-size:46px;margin-bottom:8px}
 
@@ -209,6 +216,9 @@ textarea.inp{min-height:80px;resize:vertical}
   <div id="installSteps" style="line-height:1.7"></div>
 </div>
 
+<div id="moveMenu" class="hidden"></div>
+<div class="overlay" id="moveOverlay"></div>
+
 <!-- SIRALAMA -->
 <div class="sheet" id="sortSheet">
   <div class="grab"></div>
@@ -299,6 +309,7 @@ function parseQuick(str) {
     let diff = (target - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + diff); due = ymd(d); return a; });
   if (time && !due) due = today();
   if (!due && view === "today") due = today();
+  if (view === "mine") return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId: "", mine: true };
   if (view === "daily") return { title: title.replace(/\s+/g, " ").trim(), due: "", time, priority, tags, listId: "", daily: true, dailyDone: false };
   if (view === "important" && !priority) priority = 3;
   return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId };
@@ -320,12 +331,13 @@ function fbErr(e) {
 
 /* ---------- Görünümler ---------- */
 const VIEWS = {
-  today:     { name: "Bugün",       icon: "☀️", f: t => !t.daily && !t.done && t.due && t.due <= today() },
+  today:     { name: "Bugün",       icon: "☀️", f: t => !t.daily && !t.mine && !t.done && t.due && t.due <= today() },
   daily:     { name: "Günlük",      icon: "🔄", f: t => t.daily, cnt: t => t.daily && !doneToday(t) },
-  upcoming:  { name: "Yaklaşan",    icon: "📅", f: t => !t.daily && !t.done && t.due && t.due > today() },
-  important: { name: "Önemli",      icon: "⭐", f: t => !t.daily && !t.done && t.priority === 3 },
-  all:       { name: "Tümü",        icon: "📋", f: t => !t.daily && !t.done },
-  nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.daily && !t.done && !t.due },
+  mine:      { name: "Kendim",      icon: "👤", f: t => t.mine && !t.daily && !t.done },
+  upcoming:  { name: "Yaklaşan",    icon: "📅", f: t => !t.daily && !t.mine && !t.done && t.due && t.due > today() },
+  important: { name: "Önemli",      icon: "⭐", f: t => !t.daily && !t.mine && !t.done && t.priority === 3 },
+  all:       { name: "Tümü",        icon: "📋", f: t => !t.daily && !t.mine && !t.done },
+  nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.daily && !t.mine && !t.done && !t.due },
   done:      { name: "Tamamlanan",  short: "Biten", icon: "✅", f: t => !t.daily && t.done },
 };
 const doneToday = t => t.daily && (t.dailyDone ?? !!t.lastDone);   // günlükler sabit: gece sıfırlanmaz
@@ -387,7 +399,7 @@ function render() {
   } else if (view === "today") {
     const late = items.filter(t => t.due < today()), tod = items.filter(t => t.due === today());
     groups = [["Gecikmiş", late], ["Bugün", tod]];
-  } else if (view === "upcoming" || view === "all" || view.startsWith("list:") || view === "important") {
+  } else if (view === "upcoming" || view === "mine" || view === "all" || view.startsWith("list:") || view === "important") {
     const m = new Map();
     items.forEach(t => {
       const k = !t.due ? "Tarihsiz" : t.due < today() ? "Gecikmiş" : t.due === today() ? "Bugün" : t.due === addDays(today(), 1) ? "Yarın" : fmtDate(t.due);
@@ -420,7 +432,7 @@ function taskHTML(t) {
   </div>`;
 }
 function renderChips() {
-  const base = ["today", "daily", "upcoming", "important", "all", "done"].map(k =>
+  const base = ["today", "daily", "mine", "important", "all", "done"].map(k =>
     `<button class="chip ${view === k ? "on" : ""}" data-view="${k}">${VIEWS[k].icon} ${VIEWS[k].short || VIEWS[k].name}<span class="n">${vcount(k)}</span></button>`);
   const ls = lists.map(l => {
     const n = tasks.filter(t => !t.daily && !t.done && t.listId === l.id).length;
@@ -432,7 +444,9 @@ function renderChips() {
 /* ---------- Etkileşim ---------- */
 $("#chips").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
 $("#q").oninput = render;
+let suppressClick = false;
 $("#list").onclick = e => {
+  if (suppressClick) { suppressClick = false; return; }
   const pn = e.target.closest("[data-pin]");
   if (pn) return toggleDaily(pn.dataset.pin);
   const c = e.target.closest("[data-chk]");
@@ -479,11 +493,103 @@ async function toggleDaily(id) {
     await updateDoc(r, { daily: false, updatedAt: serverTimestamp() }).catch(fbErr);
     toast("Günlükten çıkarıldı", "Geri al", () => updateDoc(r, { daily: true }));
   } else {
-    await updateDoc(r, { daily: true, done: false, doneAt: null, dailyDone: false, updatedAt: serverTimestamp() }).catch(fbErr);
+    await updateDoc(r, { daily: true, mine: false, done: false, doneAt: null, dailyDone: false, updatedAt: serverTimestamp() }).catch(fbErr);
     toast("🔄 Günlük görevlere taşındı", "Git", () => setView("daily"));
   }
   navigator.vibrate?.(15);
 }
+
+/* ---------- Basılı tut → sekmeye taşı ---------- */
+function moveTargets(t) {
+  const base = ["today", "daily", "mine", "important", "all", "done"].map(k => ({ key: k, icon: VIEWS[k].icon, name: VIEWS[k].name }));
+  const ls = lists.map(l => ({ key: "list:" + l.id, icon: l.icon || "📁", name: l.name }));
+  const cur = t.daily ? "daily" : t.mine ? "mine" : t.done ? "done" : null;
+  return [...base, ...ls].map(x => ({ ...x, cur: x.key === cur }));
+}
+async function moveTo(t, key) {
+  const r = ref("tasks", t.id);
+  const clean = { daily: false, mine: false, done: false, doneAt: null, dailyDone: false, updatedAt: serverTimestamp() };
+  let data, label;
+  if (key === "today")          data = { ...clean, due: today() };
+  else if (key === "daily")     data = { ...clean, daily: true };
+  else if (key === "mine")      data = { ...clean, mine: true };
+  else if (key === "important") data = { ...clean, priority: 3 };
+  else if (key === "all")       data = { ...clean };
+  else if (key === "done")      data = { ...clean, done: true, doneAt: serverTimestamp() };
+  else if (key.startsWith("list:")) data = { ...clean, listId: key.slice(5) };
+  if (!data) return;
+  const before = { daily: !!t.daily, mine: !!t.mine, done: !!t.done, dailyDone: !!t.dailyDone, due: t.due || "", priority: t.priority || 0, listId: t.listId || "" };
+  await updateDoc(r, data).catch(fbErr);
+  label = key.startsWith("list:") ? (lists.find(l => l.id === key.slice(5))?.name || "liste") : VIEWS[key].name;
+  navigator.vibrate?.(20);
+  toast(`➡️ ${label} sekmesine taşındı`, "Geri al", () => updateDoc(r, before));
+}
+let mv = null;   // { task, timer, x, y, open, hl }
+function openMoveMenu(t, x, y) {
+  const m = $("#moveMenu");
+  m.innerHTML = `<div class="mh">“${esc(t.title)}” → taşı</div>` +
+    moveTargets(t).map(o => `<button data-mv="${o.key}" class="${o.cur ? "cur" : ""}">${esc(o.icon)} <span>${esc(o.name)}</span></button>`).join("");
+  m.classList.remove("hidden");
+  const w = m.offsetWidth, h = m.offsetHeight, W = innerWidth, H = innerHeight;
+  m.style.left = Math.max(8, Math.min(W - w - 8, x - w / 2)) + "px";
+  m.style.top = Math.max(8 + (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--safe-t")) || 0), Math.min(H - h - 8, y - h / 2)) + "px";
+  $("#moveOverlay").classList.add("on");
+  mv.open = true; mv.hl = null;
+  navigator.vibrate?.(30);
+}
+function closeMoveMenu() {
+  $("#moveMenu").classList.add("hidden"); $("#moveOverlay").classList.remove("on");
+  document.querySelectorAll(".task.pressing").forEach(e => e.classList.remove("pressing"));
+  mv = null;
+}
+function hlAt(x, y) {
+  const el = document.elementFromPoint(x, y)?.closest("[data-mv]");
+  document.querySelectorAll("#moveMenu [data-mv]").forEach(b => b.classList.toggle("hl", b === el));
+  if (el && mv.hl !== el.dataset.mv) navigator.vibrate?.(8);
+  mv.hl = el ? el.dataset.mv : null;
+}
+$("#list").addEventListener("touchstart", e => {
+  const card = e.target.closest(".task");
+  if (!card || e.target.closest("[data-chk],[data-pin]") || e.touches.length > 1) return;
+  const t = tasks.find(x => x.id === card.dataset.id); if (!t) return;
+  const p = e.touches[0];
+  mv = { task: t, x: p.clientX, y: p.clientY, open: false, hl: null, card };
+  card.classList.add("pressing");
+  mv.timer = setTimeout(() => mv && openMoveMenu(t, mv.x, mv.y), 450);
+}, { passive: true });
+document.addEventListener("touchmove", e => {
+  if (!mv) return;
+  const p = e.touches[0];
+  if (!mv.open) {
+    if (Math.hypot(p.clientX - mv.x, p.clientY - mv.y) > 10) { clearTimeout(mv.timer); mv.card.classList.remove("pressing"); mv = null; }
+    return;
+  }
+  if (e.cancelable) e.preventDefault();   // menü açıkken sayfa kaymasın
+  hlAt(p.clientX, p.clientY);
+}, { passive: false });
+document.addEventListener("touchend", () => {
+  if (!mv) return;
+  clearTimeout(mv.timer);
+  if (!mv.open) { mv.card.classList.remove("pressing"); mv = null; return; }
+  suppressClick = true; setTimeout(() => suppressClick = false, 400);
+  if (mv.hl) { const t = mv.task, k = mv.hl; closeMoveMenu(); moveTo(t, k); }
+  else mv.card.classList.remove("pressing");   // parmak boşta bırakıldı: menü açık kalsın, dokunarak seç
+});
+document.addEventListener("touchcancel", () => { if (mv && !mv.open) { clearTimeout(mv.timer); mv.card.classList.remove("pressing"); mv = null; } });
+$("#moveMenu").addEventListener("click", e => {
+  if (suppressClick) return;   // parmak kalkınca oluşan sahte tıklamayı yok say
+  const b = e.target.closest("[data-mv]"); if (!b || !mv) return;
+  const t = mv.task; closeMoveMenu(); moveTo(t, b.dataset.mv);
+});
+$("#moveOverlay").onclick = () => { if (!suppressClick) closeMoveMenu(); };
+// Bilgisayarda sağ tık
+$("#list").addEventListener("contextmenu", e => {
+  const card = e.target.closest(".task"); if (!card) return;
+  e.preventDefault();
+  const t = tasks.find(x => x.id === card.dataset.id); if (!t) return;
+  mv = { task: t, x: e.clientX, y: e.clientY, open: false, hl: null, card };
+  openMoveMenu(t, e.clientX, e.clientY);
+});
 
 /* ---------- Sheet yönetimi ---------- */
 function openSheet(id) { closeSheets(); $("#overlay").classList.add("on"); $(id).classList.add("on"); }
