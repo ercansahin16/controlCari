@@ -551,13 +551,14 @@ $("#list").addEventListener("touchstart", e => {
   if (!card || e.target.closest("[data-chk]") || e.touches.length > 1) return;
   const t = tasks.find(x => x.id === card.dataset.id); if (!t) return;
   const p = e.touches[0];
-  mv = { task: t, x: p.clientX, y: p.clientY, open: false, hl: null, card };
+  mv = { task: t, x: p.clientX, y: p.clientY, open: false, hl: null, card, active: true };
   card.classList.add("pressing");
   mv.timer = setTimeout(() => mv && openMoveMenu(t, mv.x, mv.y), 450);
 }, { passive: true });
 document.addEventListener("touchmove", e => {
   if (!mv) return;
   const p = e.touches[0];
+  if (!mv.active) return;
   if (!mv.open) {
     if (Math.hypot(p.clientX - mv.x, p.clientY - mv.y) > 10) { clearTimeout(mv.timer); mv.card.classList.remove("pressing"); mv = null; }
     return;
@@ -566,7 +567,8 @@ document.addEventListener("touchmove", e => {
   hlAt(p.clientX, p.clientY);
 }, { passive: false });
 document.addEventListener("touchend", () => {
-  if (!mv) return;
+  if (!mv || !mv.active) return;   // yalnızca menüyü açan dokunuşun bırakılması
+  mv.active = false;
   clearTimeout(mv.timer);
   if (!mv.open) { mv.card.classList.remove("pressing"); mv = null; return; }
   suppressClick = true; setTimeout(() => suppressClick = false, 400);
@@ -579,7 +581,9 @@ $("#moveMenu").addEventListener("click", e => {
   const b = e.target.closest("[data-mv]"); if (!b || !mv) return;
   const t = mv.task; closeMoveMenu(); moveTo(t, b.dataset.mv);
 });
-$("#moveOverlay").onclick = () => { if (!suppressClick) closeMoveMenu(); };
+// Menü dışına dokununca kapat
+$("#moveOverlay").addEventListener("touchstart", e => { if (e.cancelable) e.preventDefault(); if (mv && !mv.active) closeMoveMenu(); }, { passive: false });
+$("#moveOverlay").addEventListener("click", () => { if (mv && !mv.active) closeMoveMenu(); });
 // Bilgisayarda sağ tık
 $("#list").addEventListener("contextmenu", e => {
   const card = e.target.closest(".task"); if (!card) return;
@@ -735,7 +739,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.18-1656";
+const APP_VERSION = "2026.11.18-1702";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
