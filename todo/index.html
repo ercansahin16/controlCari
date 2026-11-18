@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cut, maximum-scale=1">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<title>Yapılacaklar</title>
+<style>
+:root{
+  --bg:#0f172a;--card:#1e293b;--card2:#273449;--line:#334155;--text:#e2e8f0;--muted:#94a3b8;
+  --acc:#6366f1;--acc2:#818cf8;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;
+  --p1:#38bdf8;--p2:#f59e0b;--p3:#ef4444;--r:14px;
+  --safe-b:env(safe-area-inset-bottom,0px);--safe-t:env(safe-area-inset-top,0px);
+}
+body.light{--bg:#f1f5f9;--card:#fff;--card2:#f8fafc;--line:#e2e8f0;--text:#0f172a;--muted:#64748b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+.hidden{display:none!important}
+
+/* Giriş */
+#auth{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth-box{width:100%;max-width:360px;background:var(--card);border-radius:20px;padding:28px;text-align:center}
+.auth-box h1{margin:0 0 6px;font-size:26px}
+.auth-box p{color:var(--muted);margin:0 0 22px}
+.inp{width:100%;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card2);margin-bottom:10px;outline:none}
+.inp:focus{border-color:var(--acc)}
+.btn{width:100%;padding:13px;border-radius:12px;background:var(--acc);color:#fff;font-weight:600;margin-bottom:10px}
+.btn.ghost{background:var(--card2);color:var(--text);border:1px solid var(--line)}
+.err{color:var(--bad);font-size:14px;min-height:20px}
+
+/* Üst bar */
+header{position:sticky;top:0;z-index:20;background:var(--bg);padding:calc(var(--safe-t) + 12px) 16px 8px}
+.top{display:flex;align-items:center;gap:10px}
+.top h2{margin:0;font-size:24px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{width:40px;height:40px;border-radius:12px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+.sub{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.search{display:flex;gap:8px}
+.search input{flex:1;margin:0}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 0 4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{padding:7px 13px;border-radius:999px;background:var(--card);white-space:nowrap;font-size:14px;border:1px solid transparent}
+.chip.on{background:var(--acc);color:#fff}
+.chip .n{opacity:.7;margin-left:4px;font-size:12px}
+
+/* Liste */
+main{padding:4px 16px calc(110px + var(--safe-b))}
+.group-title{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 4px 8px;display:flex;justify-content:space-between}
+.task{display:flex;gap:12px;align-items:flex-start;background:var(--card);border-radius:var(--r);padding:13px 14px;margin-bottom:8px;border-left:4px solid transparent;transition:opacity .2s}
+.task.p1{border-left-color:var(--p1)}.task.p2{border-left-color:var(--p2)}.task.p3{border-left-color:var(--p3)}
+.task.done{opacity:.5}
+.task.done .t-title{text-decoration:line-through}
+.chk{width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px}
+.task.done .chk{background:var(--ok);border-color:var(--ok)}
+.t-body{flex:1;min-width:0}
+.t-title{word-wrap:break-word;line-height:1.35}
+.t-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;font-size:12px;color:var(--muted)}
+.t-meta span{background:var(--card2);padding:2px 8px;border-radius:999px}
+.t-meta .late{color:var(--bad)}
+.t-meta .today{color:var(--warn)}
+.empty{text-align:center;color:var(--muted);padding:60px 20px}
+.empty div{font-size:46px;margin-bottom:8px}
+
+/* Hızlı ekleme */
+.quick{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 12px calc(10px + var(--safe-b));background:linear-gradient(transparent,var(--bg) 30%)}
+.quick form{display:flex;gap:8px;max-width:720px;margin:0 auto}
+.quick input{flex:1;margin:0;background:var(--card);padding:15px}
+.quick button{width:52px;border-radius:12px;background:var(--acc);color:#fff;font-size:26px}
+
+/* Alt sayfa (sheet) */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;opacity:0;pointer-events:none;transition:.2s}
+.overlay.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);border-radius:22px 22px 0 0;max-height:92vh;overflow-y:auto;padding:8px 18px calc(20px + var(--safe-b));transform:translateY(105%);transition:transform .25s ease;max-width:720px;margin:0 auto}
+.sheet.on{transform:none}
+.grab{width:40px;height:5px;background:var(--line);border-radius:3px;margin:4px auto 14px}
+.sheet h3{margin:0 0 14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+textarea.inp{min-height:80px;resize:vertical}
+.seg{display:flex;background:var(--card2);border-radius:12px;padding:3px;border:1px solid var(--line)}
+.seg button{flex:1;padding:9px 4px;border-radius:9px;font-size:14px}
+.seg button.on{background:var(--acc);color:#fff}
+.sublist .s{display:flex;align-items:center;gap:8px;padding:6px 0}
+.sublist .s input[type=text]{flex:1;margin:0;padding:8px 10px}
+.sublist .s .x{color:var(--bad);font-size:18px;padding:4px 8px}
+.cb{width:20px;height:20px;accent-color:var(--ok)}
+.actions{display:flex;gap:10px;margin-top:16px}
+.actions .btn{margin:0}
+.btn.danger{background:transparent;border:1px solid var(--bad);color:var(--bad)}
+.menu-item{display:flex;align-items:center;gap:12px;padding:14px 6px;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.menu-item .dot{width:12px;height:12px;border-radius:50%}
+.menu-item .cnt{margin-left:auto;color:var(--muted);font-size:14px}
+.colors{display:flex;gap:10px;flex-wrap:wrap}
+.colors button{width:32px;height:32px;border-radius:50%;border:3px solid transparent}
+.colors button.on{border-color:var(--text)}
+.toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%);background:#111827;color:#fff;padding:11px 16px;border-radius:12px;z-index:60;font-size:14px;display:flex;gap:14px;align-items:center;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.toast button{color:var(--acc2);font-weight:600}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.stat div{background:var(--card2);border-radius:12px;padding:12px;text-align:center}
+.stat b{display:block;font-size:22px}
+.stat small{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- GİRİŞ -->
+<section id="auth" class="hidden">
+  <div class="auth-box">
+    <h1>✅ Yapılacaklar</h1>
+    <p>Kişisel görev yöneticin</p>
+    <input class="inp" id="email" type="email" placeholder="E-posta" autocomplete="email">
+    <input class="inp" id="pass" type="password" placeholder="Şifre" autocomplete="current-password">
+    <button class="btn" id="loginBtn">Giriş yap</button>
+    <button class="btn ghost" id="googleBtn">Google ile giriş</button>
+    <div class="err" id="authErr"></div>
+  </div>
+</section>
+
+<!-- UYGULAMA -->
+<section id="app" class="hidden">
+  <header>
+    <div class="top">
+      <button class="icon-btn" id="menuBtn" aria-label="Menü">☰</button>
+      <h2 id="viewTitle">Bugün</h2>
+      <button class="icon-btn" id="sortBtn" aria-label="Sırala">⇅</button>
+    </div>
+    <div class="sub" id="viewSub"></div>
+    <div class="search"><input class="inp" id="q" type="search" placeholder="🔍 Ara: başlık, not, #etiket"></div>
+    <div class="chips" id="chips"></div>
+  </header>
+  <main id="list"></main>
+  <div class="quick">
+    <form id="quickForm" autocomplete="off">
+      <input class="inp" id="quickInput" placeholder="Görev ekle…  (örn: Fatura öde yarın !3 #ev)">
+      <button type="submit" aria-label="Ekle">+</button>
+    </form>
+  </div>
+</section>
+
+<div class="overlay" id="overlay"></div>
+
+<!-- GÖREV DÜZENLE -->
+<div class="sheet" id="taskSheet">
+  <div class="grab"></div>
+  <h3 id="sheetTitle">Görev</h3>
+  <div class="field"><input class="inp" id="fTitle" placeholder="Başlık"></div>
+  <div class="field"><label>Not</label><textarea class="inp" id="fNote" placeholder="Ayrıntılar…"></textarea></div>
+  <div class="row">
+    <div class="field"><label>Tarih</label><input class="inp" id="fDue" type="date"></div>
+    <div class="field"><label>Saat</label><input class="inp" id="fTime" type="time"></div>
+  </div>
+  <div class="field"><label>Öncelik</label>
+    <div class="seg" id="fPrio">
+      <button data-v="0">Yok</button><button data-v="1">Düşük</button><button data-v="2">Orta</button><button data-v="3">Yüksek</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="field"><label>Liste</label><select class="inp" id="fList"></select></div>
+    <div class="field"><label>Tekrar</label>
+      <select class="inp" id="fRepeat">
+        <option value="none">Tekrar yok</option><option value="daily">Her gün</option>
+        <option value="weekdays">Hafta içi</option><option value="weekly">Her hafta</option>
+        <option value="monthly">Her ay</option><option value="yearly">Her yıl</option>
+      </select>
+    </div>
+  </div>
+  <div class="field"><label>Etiketler (virgülle)</label><input class="inp" id="fTags" placeholder="iş, ev, alışveriş"></div>
+  <div class="field"><label>Alt görevler</label>
+    <div class="sublist" id="fSubs"></div>
+    <button class="btn ghost" id="addSub" type="button" style="margin-top:6px">+ Alt görev</button>
+  </div>
+  <div class="actions">
+    <button class="btn danger" id="delTask" style="flex:0 0 auto;width:auto;padding:13px 18px">Sil</button>
+    <button class="btn" id="saveTask">Kaydet</button>
+  </div>
+</div>
+
+<!-- MENÜ -->
+<div class="sheet" id="menuSheet">
+  <div class="grab"></div>
+  <div class="stat" id="stats"></div>
+  <div id="menuViews"></div>
+  <div class="group-title"><span>Listelerim</span></div>
+  <div id="menuLists"></div>
+  <button class="menu-item" id="newListBtn">➕ <span>Yeni liste</span></button>
+  <div class="group-title"><span>Ayarlar</span></div>
+  <button class="menu-item" id="themeBtn">🌓 <span>Açık / koyu tema</span></button>
+  <button class="menu-item" id="clearDoneBtn">🧹 <span>Tamamlananları temizle</span></button>
+  <button class="menu-item" id="exportBtn">💾 <span>Yedek indir (JSON)</span></button>
+  <button class="menu-item" id="logoutBtn">🚪 <span>Çıkış yap</span><span class="cnt" id="userMail"></span></button>
+</div>
+
+<!-- LİSTE DÜZENLE -->
+<div class="sheet" id="listSheet">
+  <div class="grab"></div>
+  <h3 id="listSheetTitle">Liste</h3>
+  <div class="field"><input class="inp" id="lName" placeholder="Liste adı (örn: İş, Ev, Alışveriş)"></div>
+  <div class="field"><label>Emoji</label><input class="inp" id="lIcon" placeholder="📁" maxlength="4"></div>
+  <div class="field"><label>Renk</label><div class="colors" id="lColors"></div></div>
+  <div class="actions">
+    <button class="btn danger" id="delList" style="flex:0 0 auto;width:auto;padding:13px 18px">Sil</button>
+    <button class="btn" id="saveList">Kaydet</button>
+  </div>
+</div>
+
+<!-- SIRALAMA -->
+<div class="sheet" id="sortSheet">
+  <div class="grab"></div>
+  <h3>Sıralama</h3>
+  <div id="sortOpts"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+  onSnapshot, serverTimestamp, writeBatch }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC5UAlvWzKeKUVMrR17Vz2XqIewyZR-zQM",
+  authDomain: "muhtelif123.firebaseapp.com",
+  projectId: "muhtelif123",
+  storageBucket: "muhtelif123.firebasestorage.app",
+  messagingSenderId: "904947812712",
+  appId: "1:904947812712:web:42b69a4bf9c37826e86edd",
+  measurementId: "G-ZCWB4TEB7W"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+// Çevrimdışı çalışma: internet yokken de eklenir, gelince senkronlanır
+const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const COLORS = ["#6366f1","#22c55e","#f59e0b","#ef4444","#38bdf8","#ec4899","#a855f7","#14b8a6","#64748b"];
+const PRIO = ["", "Düşük", "Orta", "Yüksek"];
+const REP = { daily:"Her gün", weekdays:"Hafta içi", weekly:"Her hafta", monthly:"Her ay", yearly:"Her yıl" };
+
+let uid = null, tasks = [], lists = [], unsubs = [];
+let view = localStorage.getItem("view") || "today";
+let sortBy = localStorage.getItem("sort") || "smart";
+let editing = null, editingList = null, subDraft = [], prioDraft = 0, colorDraft = COLORS[0];
+
+/* ---------- Tarih yardımcıları ---------- */
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = () => ymd(new Date());
+const addDays = (s, n) => { const d = new Date(s + "T00:00"); d.setDate(d.getDate() + n); return ymd(d); };
+function nextDue(s, rep) {
+  const base = s || today();
+  const d = new Date(base + "T00:00");
+  if (rep === "daily") d.setDate(d.getDate() + 1);
+  else if (rep === "weekdays") { do d.setDate(d.getDate() + 1); while ([0,6].includes(d.getDay())); }
+  else if (rep === "weekly") d.setDate(d.getDate() + 7);
+  else if (rep === "monthly") d.setMonth(d.getMonth() + 1);
+  else if (rep === "yearly") d.setFullYear(d.getFullYear() + 1);
+  return ymd(d);
+}
+function dueLabel(t) {
+  if (!t.due) return null;
+  const td = today();
+  let txt, cls = "";
+  if (t.due < td && !t.done) { txt = "Gecikti · " + fmtDate(t.due); cls = "late"; }
+  else if (t.due === td) { txt = "Bugün"; cls = "today"; }
+  else if (t.due === addDays(td, 1)) txt = "Yarın";
+  else txt = fmtDate(t.due);
+  if (t.time) txt += " " + t.time;
+  return { txt, cls };
+}
+const fmtDate = s => new Date(s + "T00:00").toLocaleDateString("tr-TR", { day:"numeric", month:"short", weekday:"short" });
+
+/* ---------- Hızlı ekleme ayrıştırıcı ----------
+   "Fatura öde yarın 14:00 !3 #ev @İş"
+   bugün / yarın / pzt..paz / 25.12  → tarih,  !1-3 → öncelik,  #etiket,  @liste */
+function parseQuick(str) {
+  let title = str, due = "", time = "", priority = 0, tags = [], listId = currentListId();
+  const days = { "pzt":1,"pazartesi":1,"sal":2,"salı":2,"çar":3,"çarşamba":3,"per":4,"perşembe":4,"cum":5,"cuma":5,"cmt":6,"cumartesi":6,"paz":0,"pazar":0 };
+  title = title.replace(/(^|\s)!([0-3])(?=\s|$)/, (_, a, p) => { priority = +p; return a; });
+  title = title.replace(/(^|\s)#([\wçğıöşüÇĞİÖŞÜ-]+)/g, (_, a, t) => { tags.push(t.toLowerCase()); return a; });
+  title = title.replace(/(^|\s)@([\wçğıöşüÇĞİÖŞÜ-]+)/, (m, a, n) => {
+    const l = lists.find(x => x.name.toLocaleLowerCase("tr") === n.toLocaleLowerCase("tr"));
+    if (l) { listId = l.id; return a; } return m;
+  });
+  title = title.replace(/(^|\s)(\d{1,2}):(\d{2})(?=\s|$)/, (_, a, h, m) => { time = `${pad(h)}:${m}`; return a; });
+  title = title.replace(/(^|\s)(bugün|yarın|öbür gün)(?=\s|$)/i, (_, a, w) => {
+    w = w.toLocaleLowerCase("tr"); due = w === "bugün" ? today() : addDays(today(), w === "yarın" ? 1 : 2); return a; });
+  title = title.replace(/(^|\s)(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?(?=\s|$)/, (_, a, d, m, y) => {
+    const now = new Date(); let yr = y ? (y.length === 2 ? 2000 + +y : +y) : now.getFullYear();
+    let s = `${yr}-${pad(m)}-${pad(d)}`; if (!y && s < today()) s = `${yr+1}-${pad(m)}-${pad(d)}`;
+    due = s; return a; });
+  if (!due) title = title.replace(/(^|\s)(pazartesi|salı|çarşamba|perşembe|cumartesi|cuma|pazar|pzt|sal|çar|per|cum|cmt|paz)(?=\s|$)/i, (_, a, w) => {
+    const target = days[w.toLocaleLowerCase("tr")]; const d = new Date();
+    let diff = (target - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + diff); due = ymd(d); return a; });
+  if (time && !due) due = today();
+  if (!due && view === "today") due = today();
+  if (view === "important" && !priority) priority = 3;
+  return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId };
+}
+
+/* ---------- Auth ---------- */
+onAuthStateChanged(auth, user => {
+  unsubs.forEach(u => u()); unsubs = [];
+  if (!user) { $("#auth").classList.remove("hidden"); $("#app").classList.add("hidden"); return; }
+  uid = user.uid;
+  $("#userMail").textContent = user.email || "";
+  $("#auth").classList.add("hidden"); $("#app").classList.remove("hidden");
+  unsubs.push(onSnapshot(collection(db, "users", uid, "tasks"), s => { tasks = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, fbErr));
+  unsubs.push(onSnapshot(collection(db, "users", uid, "lists"), s => {
+    lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render(); }, fbErr));
+});
+function fbErr(e) { console.error(e); toast("Hata: " + (e.code || e.message)); }
+
+$("#loginBtn").onclick = async () => {
+  $("#authErr").textContent = "";
+  try { await signInWithEmailAndPassword(auth, $("#email").value.trim(), $("#pass").value); }
+  catch (e) { $("#authErr").textContent = "Giriş başarısız: " + e.code; }
+};
+$("#pass").addEventListener("keydown", e => e.key === "Enter" && $("#loginBtn").click());
+$("#googleBtn").onclick = async () => {
+  const p = new GoogleAuthProvider();
+  try { await signInWithPopup(auth, p); }
+  catch (e) { if (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, p);
+              else $("#authErr").textContent = e.code; }
+};
+$("#logoutBtn").onclick = () => { closeSheets(); signOut(auth); };
+
+/* ---------- Görünümler ---------- */
+const VIEWS = {
+  today:     { name: "Bugün",       icon: "☀️", f: t => !t.done && t.due && t.due <= today() },
+  upcoming:  { name: "Yaklaşan",    icon: "📅", f: t => !t.done && t.due && t.due > today() },
+  all:       { name: "Tümü",        icon: "📋", f: t => !t.done },
+  important: { name: "Önemli",      icon: "⭐", f: t => !t.done && t.priority === 3 },
+  nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.done && !t.due },
+  done:      { name: "Tamamlanan",  icon: "✅", f: t => t.done },
+};
+const currentListId = () => view.startsWith("list:") ? view.slice(5) : "";
+function viewInfo() {
+  if (view.startsWith("list:")) {
+    const l = lists.find(x => x.id === currentListId());
+    if (!l) { view = "today"; return VIEWS.today; }
+    return { name: l.name, icon: l.icon || "📁", f: t => !t.done && t.listId === l.id, list: l };
+  }
+  return VIEWS[view] || VIEWS.today;
+}
+function setView(v) { view = v; localStorage.setItem("view", v); closeSheets(); render(); window.scrollTo(0, 0); }
+
+/* ---------- Sıralama ---------- */
+const SORTS = { smart: "Akıllı (tarih + öncelik)", due: "Tarihe göre", prio: "Önceliğe göre", created: "Eklenme (yeni → eski)", alpha: "Alfabetik" };
+const ts = x => x?.toMillis ? x.toMillis() : (x || 0);
+function sorter(a, b) {
+  const dd = (a.due || "9999") .localeCompare(b.due || "9999");
+  const tt = (a.time || "99").localeCompare(b.time || "99");
+  if (sortBy === "due") return dd || tt || b.priority - a.priority;
+  if (sortBy === "prio") return b.priority - a.priority || dd;
+  if (sortBy === "created") return ts(b.createdAt) - ts(a.createdAt);
+  if (sortBy === "alpha") return a.title.localeCompare(b.title, "tr");
+  if (view === "done") return ts(b.doneAt) - ts(a.doneAt);
+  return dd || b.priority - a.priority || tt || ts(a.createdAt) - ts(b.createdAt);
+}
+
+/* ---------- Çizim ---------- */
+function render() {
+  if (!uid) return;
+  const v = viewInfo();
+  $("#viewTitle").textContent = `${v.icon} ${v.name}`;
+  const q = $("#q").value.trim().toLocaleLowerCase("tr");
+  let items = tasks.filter(v.f);
+  if (q) {
+    items = tasks.filter(t => {
+      if (q.startsWith("#")) return (t.tags || []).some(g => g.startsWith(q.slice(1)));
+      return (t.title + " " + (t.note || "") + " " + (t.tags || []).join(" ")).toLocaleLowerCase("tr").includes(q);
+    });
+  }
+  items.sort(sorter);
+  const open = tasks.filter(t => !t.done).length;
+  $("#viewSub").textContent = new Date().toLocaleDateString("tr-TR", { weekday:"long", day:"numeric", month:"long" }) + ` · ${items.length} görev · toplam ${open} açık`;
+  renderChips();
+
+  const el = $("#list");
+  if (!items.length) {
+    el.innerHTML = `<div class="empty"><div>${q ? "🔍" : "🎉"}</div>${q ? "Sonuç yok" : view === "done" ? "Henüz tamamlanan yok" : "Burada görev yok. Aşağıdan ekle!"}</div>`;
+    return;
+  }
+  // Gruplama
+  let groups;
+  if (q || view === "done" || sortBy !== "smart") groups = [["", items]];
+  else if (view === "today") {
+    const late = items.filter(t => t.due < today()), tod = items.filter(t => t.due === today());
+    groups = [["Gecikmiş", late], ["Bugün", tod]];
+  } else if (view === "upcoming" || view === "all" || view.startsWith("list:") || view === "important") {
+    const m = new Map();
+    items.forEach(t => {
+      const k = !t.due ? "Tarihsiz" : t.due < today() ? "Gecikmiş" : t.due === today() ? "Bugün" : t.due === addDays(today(), 1) ? "Yarın" : fmtDate(t.due);
+      if (!m.has(k)) m.set(k, []); m.get(k).push(t);
+    });
+    groups = [...m.entries()];
+    groups.sort((a, b) => (a[0] === "Tarihsiz") - (b[0] === "Tarihsiz"));
+  } else groups = [["", items]];
+
+  el.innerHTML = groups.filter(g => g[1].length).map(([name, arr]) =>
+    (name ? `<div class="group-title"><span>${esc(name)}</span><span>${arr.length}</span></div>` : "") + arr.map(taskHTML).join("")
+  ).join("");
+}
+function taskHTML(t) {
+  const d = dueLabel(t), l = lists.find(x => x.id === t.listId);
+  const subs = t.subtasks || [], sd = subs.filter(s => s.d).length;
+  const meta = [
+    d && `<span class="${d.cls}">📅 ${esc(d.txt)}</span>`,
+    t.repeat && t.repeat !== "none" && `<span>🔁 ${REP[t.repeat]}</span>`,
+    subs.length && `<span>☑️ ${sd}/${subs.length}</span>`,
+    t.note && `<span>📝</span>`,
+    l && !view.startsWith("list:") && `<span style="color:${l.color}">${esc(l.icon || "📁")} ${esc(l.name)}</span>`,
+    ...(t.tags || []).map(g => `<span>#${esc(g)}</span>`)
+  ].filter(Boolean).join("");
+  return `<div class="task p${t.priority} ${t.done ? "done" : ""}" data-id="${t.id}">
+    <button class="chk" data-chk="${t.id}" aria-label="Tamamla">${t.done ? "✓" : ""}</button>
+    <div class="t-body"><div class="t-title">${esc(t.title)}</div>${meta ? `<div class="t-meta">${meta}</div>` : ""}</div>
+  </div>`;
+}
+function renderChips() {
+  const cnt = k => tasks.filter(VIEWS[k].f).length;
+  const base = ["today", "upcoming", "important", "all"].map(k =>
+    `<button class="chip ${view === k ? "on" : ""}" data-view="${k}">${VIEWS[k].icon} ${VIEWS[k].name}<span class="n">${cnt(k)}</span></button>`);
+  const ls = lists.map(l => {
+    const n = tasks.filter(t => !t.done && t.listId === l.id).length;
+    return `<button class="chip ${view === "list:" + l.id ? "on" : ""}" data-view="list:${l.id}">${esc(l.icon || "📁")} ${esc(l.name)}<span class="n">${n}</span></button>`;
+  });
+  $("#chips").innerHTML = [...base, ...ls].join("");
+}
+
+/* ---------- Etkileşim ---------- */
+$("#chips").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
+$("#q").oninput = render;
+$("#list").onclick = e => {
+  const c = e.target.closest("[data-chk]");
+  if (c) return toggleDone(c.dataset.chk);
+  const t = e.target.closest(".task");
+  if (t) openTask(t.dataset.id);
+};
+
+$("#quickForm").onsubmit = async e => {
+  e.preventDefault();
+  const raw = $("#quickInput").value.trim(); if (!raw) return;
+  const p = parseQuick(raw); if (!p.title) return;
+  $("#quickInput").value = "";
+  await addDoc(collection(db, "users", uid, "tasks"), {
+    ...p, note: "", subtasks: [], repeat: "none", done: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+  }).catch(fbErr);
+  if (navigator.vibrate) navigator.vibrate(15);
+};
+
+async function toggleDone(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  const ref = doc(db, "users", uid, "tasks", id);
+  if (!t.done && t.repeat && t.repeat !== "none") {
+    // Tekrarlı görev: bir sonraki tarihe taşı, alt görevleri sıfırla
+    const nd = nextDue(t.due && t.due >= today() ? t.due : today(), t.repeat);
+    await updateDoc(ref, { due: nd, subtasks: (t.subtasks || []).map(s => ({ ...s, d: false })), updatedAt: serverTimestamp() }).catch(fbErr);
+    toast(`🔁 Sonraki: ${fmtDate(nd)}`);
+    return;
+  }
+  await updateDoc(ref, { done: !t.done, doneAt: !t.done ? serverTimestamp() : null, updatedAt: serverTimestamp() }).catch(fbErr);
+  if (!t.done) { navigator.vibrate?.(25); toast("✅ Tamamlandı", "Geri al", () => updateDoc(ref, { done: false, doneAt: null })); }
+}
+
+/* ---------- Sheet yönetimi ---------- */
+function openSheet(id) { closeSheets(); $("#overlay").classList.add("on"); $(id).classList.add("on"); }
+function closeSheets() { document.querySelectorAll(".sheet.on").forEach(s => s.classList.remove("on")); $("#overlay").classList.remove("on"); }
+$("#overlay").onclick = closeSheets;
+// Aşağı kaydırarak kapatma
+document.querySelectorAll(".sheet").forEach(sh => {
+  let y0 = null;
+  sh.addEventListener("touchstart", e => { if (sh.scrollTop <= 0) y0 = e.touches[0].clientY; }, { passive: true });
+  sh.addEventListener("touchmove", e => { if (y0 !== null && e.touches[0].clientY - y0 > 90) { y0 = null; closeSheets(); } }, { passive: true });
+  sh.addEventListener("touchend", () => y0 = null);
+});
+
+/* ---------- Görev düzenleyici ---------- */
+function openTask(id) {
+  editing = id ? tasks.find(t => t.id === id) : null;
+  const t = editing || { title: "", note: "", due: "", time: "", priority: 0, listId: currentListId(), repeat: "none", tags: [], subtasks: [] };
+  $("#sheetTitle").textContent = editing ? "Görevi düzenle" : "Yeni görev";
+  $("#fTitle").value = t.title; $("#fNote").value = t.note || "";
+  $("#fDue").value = t.due || ""; $("#fTime").value = t.time || "";
+  $("#fRepeat").value = t.repeat || "none"; $("#fTags").value = (t.tags || []).join(", ");
+  $("#fList").innerHTML = `<option value="">— Liste yok —</option>` + lists.map(l => `<option value="${l.id}">${esc(l.icon || "📁")} ${esc(l.name)}</option>`).join("");
+  $("#fList").value = t.listId || "";
+  prioDraft = t.priority || 0; paintPrio();
+  subDraft = (t.subtasks || []).map(s => ({ ...s })); paintSubs();
+  $("#delTask").classList.toggle("hidden", !editing);
+  openSheet("#taskSheet");
+}
+function paintPrio() { document.querySelectorAll("#fPrio button").forEach(b => b.classList.toggle("on", +b.dataset.v === prioDraft)); }
+$("#fPrio").onclick = e => { const b = e.target.closest("button"); if (b) { prioDraft = +b.dataset.v; paintPrio(); } };
+function paintSubs() {
+  $("#fSubs").innerHTML = subDraft.map((s, i) => `<div class="s">
+    <input type="checkbox" class="cb" data-i="${i}" ${s.d ? "checked" : ""}>
+    <input type="text" class="inp" data-t="${i}" value="${esc(s.t)}" placeholder="Alt görev">
+    <button class="x" data-x="${i}" type="button">✕</button></div>`).join("");
+}
+$("#fSubs").oninput = e => { if (e.target.dataset.t !== undefined) subDraft[+e.target.dataset.t].t = e.target.value; };
+$("#fSubs").onchange = e => { if (e.target.dataset.i !== undefined) subDraft[+e.target.dataset.i].d = e.target.checked; };
+$("#fSubs").onclick = e => { const x = e.target.dataset.x; if (x !== undefined) { subDraft.splice(+x, 1); paintSubs(); } };
+$("#addSub").onclick = () => { subDraft.push({ t: "", d: false }); paintSubs(); $("#fSubs").querySelector(`[data-t="${subDraft.length - 1}"]`).focus(); };
+
+$("#saveTask").onclick = async () => {
+  const title = $("#fTitle").value.trim(); if (!title) return $("#fTitle").focus();
+  const data = {
+    title, note: $("#fNote").value.trim(), due: $("#fDue").value, time: $("#fTime").value,
+    priority: prioDraft, listId: $("#fList").value, repeat: $("#fRepeat").value,
+    tags: $("#fTags").value.split(",").map(s => s.trim().replace(/^#/, "").toLowerCase()).filter(Boolean).slice(0, 20),
+    subtasks: subDraft.filter(s => s.t.trim()).map(s => ({ t: s.t.trim(), d: !!s.d })),
+    updatedAt: serverTimestamp()
+  };
+  if (data.time && !data.due) data.due = today();
+  closeSheets();
+  if (editing) await updateDoc(doc(db, "users", uid, "tasks", editing.id), data).catch(fbErr);
+  else await addDoc(collection(db, "users", uid, "tasks"), { ...data, done: false, createdAt: serverTimestamp() }).catch(fbErr);
+};
+$("#delTask").onclick = async () => {
+  if (!editing) return;
+  const backup = { ...editing }; delete backup.id;
+  const ref = doc(db, "users", uid, "tasks", editing.id);
+  closeSheets(); await deleteDoc(ref).catch(fbErr);
+  toast("🗑️ Silindi", "Geri al", () => setDoc(ref, backup));
+};
+// Uzun basınca yeni boş görev formu (hızlı ekleme alanı)
+let lp; $("#quickInput").addEventListener("touchstart", () => lp = setTimeout(() => openTask(null), 600), { passive: true });
+$("#quickInput").addEventListener("touchend", () => clearTimeout(lp));
+$("#quickInput").addEventListener("dblclick", () => openTask(null));
+
+/* ---------- Menü ---------- */
+$("#menuBtn").onclick = () => {
+  const open = tasks.filter(t => !t.done).length, done = tasks.filter(t => t.done).length;
+  const late = tasks.filter(t => !t.done && t.due && t.due < today()).length;
+  $("#stats").innerHTML = `<div><b>${open}</b><small>Açık</small></div><div><b style="color:var(--bad)">${late}</b><small>Gecikmiş</small></div><div><b style="color:var(--ok)">${done}</b><small>Biten</small></div>`;
+  $("#menuViews").innerHTML = Object.entries(VIEWS).map(([k, v]) =>
+    `<button class="menu-item" data-view="${k}">${v.icon} <span>${v.name}</span><span class="cnt">${tasks.filter(v.f).length}</span></button>`).join("");
+  $("#menuLists").innerHTML = lists.map(l =>
+    `<button class="menu-item" data-view="list:${l.id}"><span class="dot" style="background:${l.color}"></span>${esc(l.icon || "📁")} <span>${esc(l.name)}</span>
+     <span class="cnt">${tasks.filter(t => !t.done && t.listId === l.id).length} <span data-edit-list="${l.id}" style="padding:4px 8px">✏️</span></span></button>`).join("")
+     || `<div class="sub" style="padding:6px">Henüz liste yok</div>`;
+  openSheet("#menuSheet");
+};
+$("#menuSheet").onclick = e => {
+  const ed = e.target.closest("[data-edit-list]"); if (ed) { e.stopPropagation(); return openList(ed.dataset.editList); }
+  const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view);
+};
+$("#newListBtn").onclick = () => openList(null);
+$("#themeBtn").onclick = () => { document.body.classList.toggle("light"); localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark"); };
+if (localStorage.getItem("theme") === "light") document.body.classList.add("light");
+$("#clearDoneBtn").onclick = async () => {
+  const done = tasks.filter(t => t.done); if (!done.length) return toast("Temizlenecek görev yok");
+  if (!confirm(`${done.length} tamamlanmış görev silinsin mi?`)) return;
+  for (let i = 0; i < done.length; i += 400) {
+    const b = writeBatch(db); done.slice(i, i + 400).forEach(t => b.delete(doc(db, "users", uid, "tasks", t.id))); await b.commit();
+  }
+  closeSheets(); toast("🧹 Temizlendi");
+};
+$("#exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), lists, tasks }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `todo-yedek-${today()}.json`; a.click();
+};
+
+/* ---------- Liste düzenleyici ---------- */
+function openList(id) {
+  editingList = id ? lists.find(l => l.id === id) : null;
+  $("#listSheetTitle").textContent = editingList ? "Listeyi düzenle" : "Yeni liste";
+  $("#lName").value = editingList?.name || ""; $("#lIcon").value = editingList?.icon || "";
+  colorDraft = editingList?.color || COLORS[lists.length % COLORS.length]; paintColors();
+  $("#delList").classList.toggle("hidden", !editingList);
+  openSheet("#listSheet"); setTimeout(() => $("#lName").focus(), 250);
+}
+function paintColors() { $("#lColors").innerHTML = COLORS.map(c => `<button style="background:${c}" data-c="${c}" class="${c === colorDraft ? "on" : ""}"></button>`).join(""); }
+$("#lColors").onclick = e => { const c = e.target.dataset.c; if (c) { colorDraft = c; paintColors(); } };
+$("#saveList").onclick = async () => {
+  const name = $("#lName").value.trim(); if (!name) return $("#lName").focus();
+  const data = { name, icon: $("#lIcon").value.trim() || "📁", color: colorDraft };
+  closeSheets();
+  if (editingList) await updateDoc(doc(db, "users", uid, "lists", editingList.id), data).catch(fbErr);
+  else { const r = await addDoc(collection(db, "users", uid, "lists"), { ...data, order: lists.length, createdAt: serverTimestamp() }).catch(fbErr); if (r) setView("list:" + r.id); }
+};
+$("#delList").onclick = async () => {
+  if (!editingList) return;
+  const inList = tasks.filter(t => t.listId === editingList.id);
+  if (!confirm(`"${editingList.name}" silinsin mi?${inList.length ? `\n${inList.length} görev "Liste yok"a taşınacak.` : ""}`)) return;
+  const b = writeBatch(db);
+  inList.forEach(t => b.update(doc(db, "users", uid, "tasks", t.id), { listId: "" }));
+  b.delete(doc(db, "users", uid, "lists", editingList.id));
+  await b.commit().catch(fbErr);
+  closeSheets(); if (view === "list:" + editingList.id) setView("today");
+};
+
+/* ---------- Sıralama menüsü ---------- */
+$("#sortBtn").onclick = () => {
+  $("#sortOpts").innerHTML = Object.entries(SORTS).map(([k, v]) => `<button class="menu-item" data-sort="${k}">${sortBy === k ? "●" : "○"} <span>${v}</span></button>`).join("");
+  openSheet("#sortSheet");
+};
+$("#sortOpts").onclick = e => { const b = e.target.closest("[data-sort]"); if (b) { sortBy = b.dataset.sort; localStorage.setItem("sort", sortBy); closeSheets(); render(); } };
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function toast(msg, actLabel, act) {
+  document.querySelector(".toast")?.remove(); clearTimeout(toastTimer);
+  const el = document.createElement("div"); el.className = "toast";
+  el.innerHTML = `<span>${esc(msg)}</span>` + (actLabel ? `<button>${esc(actLabel)}</button>` : "");
+  if (act) el.querySelector("button").onclick = () => { act(); el.remove(); };
+  document.body.appendChild(el); toastTimer = setTimeout(() => el.remove(), 4000);
+}
+
+// Gün değişince (gece yarısı) görünümü yenile
+let lastDay = today();
+setInterval(() => { if (today() !== lastDay) { lastDay = today(); render(); } }, 60000);
+document.addEventListener("visibilitychange", () => !document.hidden && render());
+</script>
+</body>
+</html>
