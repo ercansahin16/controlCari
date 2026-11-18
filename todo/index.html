@@ -62,6 +62,9 @@ main{padding:4px 16px calc(110px + var(--safe-b))}
 .t-meta span{background:var(--card2);padding:2px 8px;border-radius:999px}
 .t-meta .late{color:var(--bad)}
 .t-meta .today{color:var(--warn)}
+.pin{width:34px;height:34px;border-radius:10px;flex-shrink:0;font-size:17px;opacity:.35;filter:grayscale(1);margin:-4px -4px -4px 0}
+.pin.on{opacity:1;filter:none;background:var(--card2)}
+.streak{color:var(--warn)}
 .empty{text-align:center;color:var(--muted);padding:60px 20px}
 .empty div{font-size:46px;margin-bottom:8px}
 
@@ -286,6 +289,7 @@ function parseQuick(str) {
     let diff = (target - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + diff); due = ymd(d); return a; });
   if (time && !due) due = today();
   if (!due && view === "today") due = today();
+  if (view === "daily") return { title: title.replace(/\s+/g, " ").trim(), due: "", time, priority, tags, listId: "", daily: true, streak: 0, lastDone: "" };
   if (view === "important" && !priority) priority = 3;
   return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId };
 }
@@ -306,19 +310,23 @@ function fbErr(e) {
 
 /* ---------- Görünümler ---------- */
 const VIEWS = {
-  today:     { name: "Bugün",       icon: "☀️", f: t => !t.done && t.due && t.due <= today() },
-  upcoming:  { name: "Yaklaşan",    icon: "📅", f: t => !t.done && t.due && t.due > today() },
-  all:       { name: "Tümü",        icon: "📋", f: t => !t.done },
-  important: { name: "Önemli",      icon: "⭐", f: t => !t.done && t.priority === 3 },
-  nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.done && !t.due },
-  done:      { name: "Tamamlanan",  icon: "✅", f: t => t.done },
+  today:     { name: "Bugün",       icon: "☀️", f: t => !t.daily && !t.done && t.due && t.due <= today() },
+  daily:     { name: "Günlük",      icon: "🔄", f: t => t.daily, cnt: t => t.daily && !doneToday(t) },
+  upcoming:  { name: "Yaklaşan",    icon: "📅", f: t => !t.daily && !t.done && t.due && t.due > today() },
+  important: { name: "Önemli",      icon: "⭐", f: t => !t.daily && !t.done && t.priority === 3 },
+  all:       { name: "Tümü",        icon: "📋", f: t => !t.daily && !t.done },
+  nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.daily && !t.done && !t.due },
+  done:      { name: "Tamamlanan",  icon: "✅", f: t => !t.daily && t.done },
 };
+const doneToday = t => t.daily && t.lastDone === today();
+const isDone = t => t.daily ? doneToday(t) : t.done;
+const vcount = k => tasks.filter(VIEWS[k].cnt || VIEWS[k].f).length;
 const currentListId = () => view.startsWith("list:") ? view.slice(5) : "";
 function viewInfo() {
   if (view.startsWith("list:")) {
     const l = lists.find(x => x.id === currentListId());
     if (!l) { view = "today"; return VIEWS.today; }
-    return { name: l.name, icon: l.icon || "📁", f: t => !t.done && t.listId === l.id, list: l };
+    return { name: l.name, icon: l.icon || "📁", f: t => !t.daily && !t.done && t.listId === l.id, list: l };
   }
   return VIEWS[view] || VIEWS.today;
 }
@@ -352,7 +360,7 @@ function render() {
     });
   }
   items.sort(sorter);
-  const open = tasks.filter(t => !t.done).length;
+  const open = tasks.filter(t => !t.daily && !t.done).length;
   $("#viewSub").textContent = new Date().toLocaleDateString("tr-TR", { weekday:"long", day:"numeric", month:"long" }) + ` · ${items.length} görev · toplam ${open} açık`;
   renderChips();
 
@@ -364,7 +372,9 @@ function render() {
   // Gruplama
   let groups;
   if (q || view === "done" || sortBy !== "smart") groups = [["", items]];
-  else if (view === "today") {
+  else if (view === "daily") {
+    groups = [["Bugün yapılacak", items.filter(t => !doneToday(t))], ["Bugün tamamlandı", items.filter(doneToday)]];
+  } else if (view === "today") {
     const late = items.filter(t => t.due < today()), tod = items.filter(t => t.due === today());
     groups = [["Gecikmiş", late], ["Bugün", tod]];
   } else if (view === "upcoming" || view === "all" || view.startsWith("list:") || view === "important") {
@@ -385,24 +395,26 @@ function taskHTML(t) {
   const d = dueLabel(t), l = lists.find(x => x.id === t.listId);
   const subs = t.subtasks || [], sd = subs.filter(s => s.d).length;
   const meta = [
-    d && `<span class="${d.cls}">📅 ${esc(d.txt)}</span>`,
+    t.daily && (t.streak || 0) > 0 && `<span class="streak">🔥 ${t.streak} gün</span>`,
+    !t.daily && d && `<span class="${d.cls}">📅 ${esc(d.txt)}</span>`,
     t.repeat && t.repeat !== "none" && `<span>🔁 ${REP[t.repeat]}</span>`,
     subs.length && `<span>☑️ ${sd}/${subs.length}</span>`,
     t.note && `<span>📝</span>`,
     l && !view.startsWith("list:") && `<span style="color:${l.color}">${esc(l.icon || "📁")} ${esc(l.name)}</span>`,
     ...(t.tags || []).map(g => `<span>#${esc(g)}</span>`)
   ].filter(Boolean).join("");
-  return `<div class="task p${t.priority} ${t.done ? "done" : ""}" data-id="${t.id}">
-    <button class="chk" data-chk="${t.id}" aria-label="Tamamla">${t.done ? "✓" : ""}</button>
+  const dn = isDone(t);
+  return `<div class="task p${t.priority} ${dn ? "done" : ""}" data-id="${t.id}">
+    <button class="chk" data-chk="${t.id}" aria-label="Tamamla">${dn ? "✓" : ""}</button>
     <div class="t-body"><div class="t-title">${esc(t.title)}</div>${meta ? `<div class="t-meta">${meta}</div>` : ""}</div>
+    <button class="pin ${t.daily ? "on" : ""}" data-pin="${t.id}" aria-label="Günlük görev">🔄</button>
   </div>`;
 }
 function renderChips() {
-  const cnt = k => tasks.filter(VIEWS[k].f).length;
-  const base = ["today", "upcoming", "important", "all"].map(k =>
-    `<button class="chip ${view === k ? "on" : ""}" data-view="${k}">${VIEWS[k].icon} ${VIEWS[k].name}<span class="n">${cnt(k)}</span></button>`);
+  const base = ["today", "daily", "upcoming", "important", "all", "done"].map(k =>
+    `<button class="chip ${view === k ? "on" : ""}" data-view="${k}">${VIEWS[k].icon} ${VIEWS[k].name}<span class="n">${vcount(k)}</span></button>`);
   const ls = lists.map(l => {
-    const n = tasks.filter(t => !t.done && t.listId === l.id).length;
+    const n = tasks.filter(t => !t.daily && !t.done && t.listId === l.id).length;
     return `<button class="chip ${view === "list:" + l.id ? "on" : ""}" data-view="list:${l.id}">${esc(l.icon || "📁")} ${esc(l.name)}<span class="n">${n}</span></button>`;
   });
   $("#chips").innerHTML = [...base, ...ls].join("");
@@ -412,6 +424,8 @@ function renderChips() {
 $("#chips").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
 $("#q").oninput = render;
 $("#list").onclick = e => {
+  const pn = e.target.closest("[data-pin]");
+  if (pn) return toggleDaily(pn.dataset.pin);
   const c = e.target.closest("[data-chk]");
   if (c) return toggleDone(c.dataset.chk);
   const t = e.target.closest(".task");
@@ -432,6 +446,17 @@ $("#quickForm").onsubmit = async e => {
 async function toggleDone(id) {
   const t = tasks.find(x => x.id === id); if (!t) return;
   const r = ref("tasks", id);
+  if (t.daily) {
+    if (doneToday(t)) {   // bugünkü işareti geri al
+      await updateDoc(r, { lastDone: t.prevDone || "", streak: Math.max(0, (t.streak || 1) - 1), updatedAt: serverTimestamp() }).catch(fbErr);
+    } else {
+      const streak = t.lastDone === addDays(today(), -1) ? (t.streak || 0) + 1 : 1;
+      await updateDoc(r, { prevDone: t.lastDone || "", lastDone: today(), streak,
+        subtasks: (t.subtasks || []).map(s => ({ ...s, d: false })), updatedAt: serverTimestamp() }).catch(fbErr);
+      navigator.vibrate?.(25); toast(streak > 1 ? `🔥 ${streak} gündür devam!` : "✅ Bugün tamamlandı");
+    }
+    return;
+  }
   if (!t.done && t.repeat && t.repeat !== "none") {
     // Tekrarlı görev: bir sonraki tarihe taşı, alt görevleri sıfırla
     const nd = nextDue(t.due && t.due >= today() ? t.due : today(), t.repeat);
@@ -441,6 +466,19 @@ async function toggleDone(id) {
   }
   await updateDoc(r, { done: !t.done, doneAt: !t.done ? serverTimestamp() : null, updatedAt: serverTimestamp() }).catch(fbErr);
   if (!t.done) { navigator.vibrate?.(25); toast("✅ Tamamlandı", "Geri al", () => updateDoc(r, { done: false, doneAt: null })); }
+}
+
+async function toggleDaily(id) {
+  const t = tasks.find(x => x.id === id); if (!t) return;
+  const r = ref("tasks", id);
+  if (t.daily) {
+    await updateDoc(r, { daily: false, updatedAt: serverTimestamp() }).catch(fbErr);
+    toast("Günlükten çıkarıldı", "Geri al", () => updateDoc(r, { daily: true }));
+  } else {
+    await updateDoc(r, { daily: true, done: false, doneAt: null, streak: t.streak || 0, lastDone: t.lastDone || "", updatedAt: serverTimestamp() }).catch(fbErr);
+    toast("🔄 Günlük görevlere taşındı", "Git", () => setView("daily"));
+  }
+  navigator.vibrate?.(15);
 }
 
 /* ---------- Sheet yönetimi ---------- */
@@ -530,14 +568,17 @@ $("#quickInput").addEventListener("dblclick", () => openTask(null));
 
 /* ---------- Menü ---------- */
 $("#menuBtn").onclick = () => {
-  const open = tasks.filter(t => !t.done).length, done = tasks.filter(t => t.done).length;
-  const late = tasks.filter(t => !t.done && t.due && t.due < today()).length;
-  $("#stats").innerHTML = `<div><b>${open}</b><small>Açık</small></div><div><b style="color:var(--bad)">${late}</b><small>Gecikmiş</small></div><div><b style="color:var(--ok)">${done}</b><small>Biten</small></div>`;
+  const nd = tasks.filter(t => !t.daily);
+  const open = nd.filter(t => !t.done).length, done = nd.filter(t => t.done).length;
+  const late = nd.filter(t => !t.done && t.due && t.due < today()).length;
+  const dl = tasks.filter(t => t.daily), dlDone = dl.filter(doneToday).length;
+  $("#stats").innerHTML = `<div><b>${open}</b><small>Açık</small></div><div><b style="color:var(--bad)">${late}</b><small>Gecikmiş</small></div><div><b style="color:var(--ok)">${done}</b><small>Biten</small></div>`
+    + (dl.length ? `<div style="grid-column:1/-1"><b style="color:var(--warn)">${dlDone} / ${dl.length}</b><small>Bugünkü günlük görevler</small></div>` : "");
   $("#menuViews").innerHTML = Object.entries(VIEWS).map(([k, v]) =>
-    `<button class="menu-item" data-view="${k}">${v.icon} <span>${v.name}</span><span class="cnt">${tasks.filter(v.f).length}</span></button>`).join("");
+    `<button class="menu-item" data-view="${k}">${v.icon} <span>${v.name}</span><span class="cnt">${vcount(k)}</span></button>`).join("");
   $("#menuLists").innerHTML = lists.map(l =>
     `<button class="menu-item" data-view="list:${l.id}"><span class="dot" style="background:${l.color}"></span>${esc(l.icon || "📁")} <span>${esc(l.name)}</span>
-     <span class="cnt">${tasks.filter(t => !t.done && t.listId === l.id).length} <span data-edit-list="${l.id}" style="padding:4px 8px">✏️</span></span></button>`).join("")
+     <span class="cnt">${tasks.filter(t => !t.daily && !t.done && t.listId === l.id).length} <span data-edit-list="${l.id}" style="padding:4px 8px">✏️</span></span></button>`).join("")
      || `<div class="sub" style="padding:6px">Henüz liste yok</div>`;
   openSheet("#menuSheet");
 };
@@ -549,7 +590,7 @@ $("#newListBtn").onclick = () => openList(null);
 $("#themeBtn").onclick = () => { document.body.classList.toggle("light"); localStorage.setItem("theme", document.body.classList.contains("light") ? "light" : "dark"); };
 if (localStorage.getItem("theme") === "light") document.body.classList.add("light");
 $("#clearDoneBtn").onclick = async () => {
-  const done = tasks.filter(t => t.done); if (!done.length) return toast("Temizlenecek görev yok");
+  const done = tasks.filter(t => t.done && !t.daily); if (!done.length) return toast("Temizlenecek görev yok");
   if (!confirm(`${done.length} tamamlanmış görev silinsin mi?`)) return;
   for (let i = 0; i < done.length; i += 400) {
     const b = writeBatch(db); done.slice(i, i + 400).forEach(t => b.delete(ref("tasks", t.id))); await b.commit();
