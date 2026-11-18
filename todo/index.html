@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Yapılacaklar">
 <title>Yapılacaklar</title>
 <style>
 :root{
@@ -127,7 +130,7 @@ textarea.inp{min-height:80px;resize:vertical}
   <main id="list"></main>
   <div class="quick">
     <form id="quickForm" autocomplete="off">
-      <input class="inp" id="quickInput" placeholder="Görev ekle…  (örn: Fatura öde yarın !3 #ev)">
+      <input class="inp" id="quickInput" placeholder="">
       <button type="submit" aria-label="Ekle">+</button>
     </form>
   </div>
@@ -180,6 +183,7 @@ textarea.inp{min-height:80px;resize:vertical}
   <div id="menuLists"></div>
   <button class="menu-item" id="newListBtn">➕ <span>Yeni liste</span></button>
   <div class="group-title"><span>Ayarlar</span></div>
+  <button class="menu-item" id="installBtn">📲 <span>Telefon ana ekranına ekle</span></button>
   <button class="menu-item" id="themeBtn">🌓 <span>Açık / koyu tema</span></button>
   <button class="menu-item" id="clearDoneBtn">🧹 <span>Tamamlananları temizle</span></button>
   <button class="menu-item" id="exportBtn">💾 <span>Yedek indir (JSON)</span></button>
@@ -196,6 +200,13 @@ textarea.inp{min-height:80px;resize:vertical}
     <button class="btn danger" id="delList" style="flex:0 0 auto;width:auto;padding:13px 18px">Sil</button>
     <button class="btn" id="saveList">Kaydet</button>
   </div>
+</div>
+
+<!-- ANA EKRANA EKLE (iPhone talimatı) -->
+<div class="sheet" id="installSheet">
+  <div class="grab"></div>
+  <h3>📲 Ana ekrana ekle</h3>
+  <div id="installSteps" style="line-height:1.7"></div>
 </div>
 
 <!-- SIRALAMA -->
@@ -593,6 +604,29 @@ $("#clearDoneBtn").onclick = async () => {
 $("#exportBtn").onclick = () => {
   const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), lists, tasks }, null, 2)], { type: "application/json" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `todo-yedek-${today()}.json`; a.click();
+};
+
+/* ---------- Ana ekrana ekle ---------- */
+let installEvt = null;
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; });
+window.addEventListener("appinstalled", () => { installEvt = null; toast("✅ Ana ekrana eklendi"); });
+if (isStandalone()) $("#installBtn").classList.add("hidden");
+$("#installBtn").onclick = async () => {
+  if (installEvt) {                       // Android / Chrome: tek dokunuşla kurulum
+    closeSheets(); installEvt.prompt();
+    await installEvt.userChoice.catch(() => {}); installEvt = null; return;
+  }
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  $("#installSteps").innerHTML = ios
+    ? `<p>iPhone otomatik eklemeye izin vermiyor, 3 adımda ekleyebilirsin:</p>
+       <p><b>1.</b> Adres çubuğundaki <b>Paylaş</b> simgesine dokun <span style="font-size:20px">⬆️</span></p>
+       <p><b>2.</b> Listeyi aşağı kaydır, <b>“Ana Ekrana Ekle”</b>yi seç ➕</p>
+       <p><b>3.</b> Sağ üstten <b>Ekle</b>'ye dokun.</p>
+       <p class="sub">Simge ana ekranda “Yapılacaklar” adıyla görünür ve tam ekran açılır.</p>`
+    : `<p>Tarayıcı menüsünü (⋮) aç ve <b>“Ana ekrana ekle”</b> / <b>“Uygulamayı yükle”</b>yi seç.</p>
+       <p class="sub">Seçenek görünmezse sayfayı bir kez yenileyip tekrar dene.</p>`;
+  openSheet("#installSheet");
 };
 
 /* ---------- Liste düzenleyici ---------- */
