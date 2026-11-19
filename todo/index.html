@@ -75,7 +75,18 @@ main{padding:4px 16px calc(110px + var(--safe-b))}
 .streak{color:var(--warn)}
 .task{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .task.pressing{transform:scale(.97);transition:transform .15s}
-#moveMenu{position:fixed;z-index:70;width:230px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+/* Gün şeridi */
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:6px 0 4px}
+.day{padding:6px 0 5px;border-radius:11px;background:var(--card);font-size:11px;text-align:center;line-height:1.2;color:var(--muted)}
+.day b{display:block;font-size:16px;color:var(--text)}
+.day i{display:block;font-style:normal;font-size:10px;min-height:12px;color:var(--acc2)}
+.day.on{background:var(--acc);color:#e0e7ff}.day.on b,.day.on i{color:#fff}
+.day.we b{color:var(--warn)}.day.on.we b{color:#fff}
+#moveMenu .mdays{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:4px 2px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+#moveMenu .mdays button{flex-direction:column;gap:0;padding:7px 0;font-size:10px;text-align:center;justify-content:center;color:var(--muted)}
+#moveMenu .mdays button b{font-size:15px;color:var(--text)}
+#moveMenu .mdays button.hl b,#moveMenu .mdays button.hl{color:#fff}
+#moveMenu{position:fixed;z-index:70;width:270px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 #moveMenu .mh{font-size:12px;color:var(--muted);padding:6px 10px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #moveMenu button{display:flex;gap:10px;align-items:center;width:100%;padding:11px 10px;border-radius:10px;text-align:left;font-size:15px}
 #moveMenu button.hl{background:var(--acc);color:#fff}
@@ -139,6 +150,7 @@ textarea.inp{min-height:80px;resize:vertical}
     <div class="sub" id="viewSub"></div>
     <div class="search"><input class="inp" id="q" type="search" placeholder="🔍 Ara: başlık, not, #etiket"></div>
     <div class="chips" id="chips"></div>
+    <div class="days" id="days"></div>
   </header>
   <main id="list"></main>
   <div class="quick">
@@ -316,6 +328,7 @@ function parseQuick(str) {
     let diff = (target - d.getDay() + 7) % 7 || 7; d.setDate(d.getDate() + diff); due = ymd(d); return a; });
   if (time && !due) due = today();
   if (!due && view === "today") due = today();
+  if (!due && view.startsWith("day:")) due = view.slice(4);
   if (view === "mine") return { title: title.replace(/\s+/g, " ").trim(), due, time, priority, tags, listId: "", mine: true };
   if (view === "daily") return { title: title.replace(/\s+/g, " ").trim(), due: "", time, priority, tags, listId: "", daily: true, dailyDone: false };
   if (view === "important" && !priority) priority = 3;
@@ -351,7 +364,18 @@ const doneToday = t => t.daily && (t.dailyDone ?? !!t.lastDone);   // günlükle
 const isDone = t => t.daily ? doneToday(t) : t.done;
 const vcount = k => tasks.filter(VIEWS[k].cnt || VIEWS[k].f).length;
 const currentListId = () => view.startsWith("list:") ? view.slice(5) : "";
+const DAYN = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
+const next7 = () => Array.from({ length: 7 }, (_, i) => addDays(today(), i));
+const dayParts = s => { const d = new Date(s + "T00:00"); return { wd: DAYN[d.getDay()], n: d.getDate(), we: [0, 6].includes(d.getDay()) }; };
+const dayName = s => s === today() ? "Bugün" : s === addDays(today(), 1) ? "Yarın"
+  : new Date(s + "T00:00").toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
+const dayFilter = s => t => !t.daily && !t.mine && !t.done && t.due === s;
 function viewInfo() {
+  if (view.startsWith("day:")) {
+    const ds = view.slice(4);
+    if (ds < today()) { view = "today"; return VIEWS.today; }
+    return { name: dayName(ds), icon: "📅", f: dayFilter(ds) };
+  }
   if (view.startsWith("list:")) {
     const l = lists.find(x => x.id === currentListId());
     if (!l) { view = "today"; return VIEWS.today; }
@@ -444,10 +468,14 @@ function renderChips() {
     return `<button class="chip ${view === "list:" + l.id ? "on" : ""}" data-view="list:${l.id}">${esc(l.icon || "📁")} ${esc(l.name)}<span class="n">${n}</span></button>`;
   });
   $("#chips").innerHTML = [...base, ...ls].join("");
+  $("#days").innerHTML = next7().map(ds => {
+    const p = dayParts(ds), n = tasks.filter(dayFilter(ds)).length;
+    return `<button class="day ${view === "day:" + ds ? "on" : ""} ${p.we ? "we" : ""}" data-view="day:${ds}">${ds === today() ? "Bgn" : p.wd}<b>${p.n}</b><i>${n || ""}</i></button>`;
+  }).join("");
 }
 
 /* ---------- Etkileşim ---------- */
-$("#chips").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
+$("#chips").onclick = $("#days").onclick = e => { const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view); };
 $("#q").oninput = render;
 let suppressClick = false;
 $("#list").onclick = e => {
@@ -520,17 +548,22 @@ async function moveTo(t, key) {
   else if (key === "all")       data = { ...clean };
   else if (key === "done")      data = { ...clean, done: true, doneAt: serverTimestamp() };
   else if (key.startsWith("list:")) data = { ...clean, listId: key.slice(5) };
+  else if (key.startsWith("day:"))  data = { ...clean, due: key.slice(4) };
   if (!data) return;
   const before = { daily: !!t.daily, mine: !!t.mine, done: !!t.done, dailyDone: !!t.dailyDone, due: t.due || "", priority: t.priority || 0, listId: t.listId || "" };
   await updateDoc(r, data).catch(fbErr);
-  label = key.startsWith("list:") ? (lists.find(l => l.id === key.slice(5))?.name || "liste") : VIEWS[key].name;
+  label = key.startsWith("list:") ? (lists.find(l => l.id === key.slice(5))?.name || "liste") + " sekmesine"
+        : key.startsWith("day:") ? dayName(key.slice(4)) + " gününe" : VIEWS[key].name + " sekmesine";
   navigator.vibrate?.(20);
-  toast(`➡️ ${label} sekmesine taşındı`, "Geri al", () => updateDoc(r, before));
+  toast(`➡️ ${label} taşındı`, "Geri al", () => updateDoc(r, before));
 }
 let mv = null;   // { task, timer, x, y, open, hl }
 function openMoveMenu(t, x, y) {
   const m = $("#moveMenu");
-  m.innerHTML = `<div class="mh">“${esc(t.title)}” → taşı</div>` +
+  const plain = !t.daily && !t.mine && !t.done;
+  m.innerHTML = `<div class="mh">“${esc(t.title)}” → taşı</div><div class="mdays">` +
+    next7().map(ds => { const p = dayParts(ds);
+      return `<button data-mv="day:${ds}" class="${plain && t.due === ds ? "cur" : ""}">${ds === today() ? "Bgn" : p.wd}<b>${p.n}</b></button>`; }).join("") + `</div>` +
     moveTargets(t).map(o => `<button data-mv="${o.key}" class="${o.cur ? "cur" : ""}">${esc(o.icon)} <span>${esc(o.name)}</span></button>`).join("");
   m.classList.remove("hidden");
   const w = m.offsetWidth, h = m.offsetHeight, W = innerWidth, H = innerHeight;
@@ -748,7 +781,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.18-1935";
+const APP_VERSION = "2026.11.19-0930";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
