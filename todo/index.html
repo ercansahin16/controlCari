@@ -91,6 +91,8 @@ main{padding:4px 16px calc(110px + var(--safe-b))}
 #moveMenu button{display:flex;gap:10px;align-items:center;width:100%;padding:11px 10px;border-radius:10px;text-align:left;font-size:15px}
 #moveMenu button.hl{background:var(--acc);color:#fff}
 #moveMenu button.cur{opacity:.4}
+#moveMenu button.del{color:var(--bad);border-top:1px solid var(--line);border-radius:0 0 10px 10px;margin-top:4px}
+#moveMenu button.del.hl{background:var(--bad);color:#fff}
 .empty{text-align:center;color:var(--muted);padding:60px 20px}
 .empty div{font-size:46px;margin-bottom:8px}
 
@@ -539,6 +541,12 @@ function moveTargets(t) {
 }
 async function moveTo(t, key) {
   const r = ref("tasks", t.id);
+  if (key === "delete") {
+    const backup = { ...t }; delete backup.id;
+    await deleteDoc(r).catch(fbErr);
+    navigator.vibrate?.(30);
+    return toast("🗑️ Silindi", "Geri al", () => setDoc(r, backup));
+  }
   const clean = { daily: false, mine: false, done: false, doneAt: null, dailyDone: false, updatedAt: serverTimestamp() };
   let data, label;
   if (key === "today")          data = { ...clean, due: today() };
@@ -564,7 +572,8 @@ function openMoveMenu(t, x, y) {
   m.innerHTML = `<div class="mh">“${esc(t.title)}” → taşı</div><div class="mdays">` +
     next7().map(ds => { const p = dayParts(ds);
       return `<button data-mv="day:${ds}" class="${plain && t.due === ds ? "cur" : ""}">${ds === today() ? "Bgn" : p.wd}<b>${p.n}</b></button>`; }).join("") + `</div>` +
-    moveTargets(t).map(o => `<button data-mv="${o.key}" class="${o.cur ? "cur" : ""}">${esc(o.icon)} <span>${esc(o.name)}</span></button>`).join("");
+    moveTargets(t).map(o => `<button data-mv="${o.key}" class="${o.cur ? "cur" : ""}">${esc(o.icon)} <span>${esc(o.name)}</span></button>`).join("") +
+    `<button data-mv="delete" class="del">🗑️ <span>Sil</span></button>`;
   m.classList.remove("hidden");
   const w = m.offsetWidth, h = m.offsetHeight, W = innerWidth, H = innerHeight;
   m.style.left = Math.max(8, Math.min(W - w - 8, x - w / 2)) + "px";
@@ -781,7 +790,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.19-0930";
+const APP_VERSION = "2026.11.19-1705";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
