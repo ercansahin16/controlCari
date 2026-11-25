@@ -267,7 +267,7 @@ textarea.inp{min-height:80px;resize:vertical}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
   onSnapshot, serverTimestamp, writeBatch, disableNetwork, enableNetwork, waitForPendingWrites }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -284,7 +284,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 // Çevrimdışı çalışma: internet yokken de eklenir, gelince senkronlanır
 const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  // Ana ekran uygulaması tek pencere: bağlantıyı her zaman kendisi alsın
+  // (arka planda uyuyan eski bir Safari sekmesi bağlantıyı kilitleyemesin)
+  localCache: persistentLocalCache({ tabManager:
+    (matchMedia("(display-mode: standalone)").matches || navigator.standalone === true || /iPhone|iPad|Android/i.test(navigator.userAgent))
+      ? persistentSingleTabManager({ forceOwnership: true })
+      : persistentMultipleTabManager() }),
   experimentalForceLongPolling: true   // iPhone ana ekran uygulamasında bağlantı takılmasını önler
 });
 
@@ -867,7 +872,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.25-1140";
+const APP_VERSION = "2026.11.25-1150";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
