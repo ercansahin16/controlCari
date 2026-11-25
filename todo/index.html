@@ -12,6 +12,15 @@
 <meta name="apple-mobile-web-app-title" content="Yapılacaklar">
 <title>Yapılacaklar</title>
 <script>
+// Kendi service worker'ımız (/todo/ kapsamı): LED Saha'nın kök SW'si Firebase isteklerine karışmasın
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    const own = navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL.includes("/todo/sw.js");
+    if (own && !reloaded && !sessionStorage.getItem("swfix")) { reloaded = true; sessionStorage.setItem("swfix", "1"); location.reload(); }
+  });
+}
 // Temayı sayfa çizilmeden önce uygula (yanıp sönmeyi ve koyu şeritleri önler)
 try { if (localStorage.getItem("theme") === "light") { document.documentElement.classList.add("light");
   document.querySelector('meta[name="theme-color"]').content = "#f1f5f9"; } } catch (e) {}
@@ -872,7 +881,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.25-1150";
+const APP_VERSION = "2026.11.25-1200";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
