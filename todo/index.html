@@ -388,7 +388,9 @@ unsubs.push(onSnapshot(col("tasks"), { includeMetadataChanges: true }, s => {
 }, fbErr));
 unsubs.push(onSnapshot(col("lists"), s => {
   lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render(); }, fbErr));
+let lastErr = "";
 function fbErr(e) {
+  lastErr = (e && (e.code || e.message)) || String(e);
   console.error(e);
   toast("Hata: " + (e.code === "permission-denied" ? "Firestore kuralları yayınlanmamış" : (e.code || e.message)));
 }
@@ -396,8 +398,27 @@ function fbErr(e) {
 // Bağlantı durumuna dokununca yeniden bağlan
 $("#viewSub").addEventListener("click", async e => {
   if (!e.target.closest("[data-sync]")) return;
-  toast("🔄 Yeniden bağlanılıyor…");
-  try { await disableNetwork(db); await enableNetwork(db); } catch (err) { fbErr(err); }
+  $("#installSteps").innerHTML = "<p>⏳ Bağlantı test ediliyor…</p>";
+  $("#installSheet h3").textContent = "🔌 Bağlantı testi";
+  openSheet("#installSheet");
+  const lines = [];
+  const add = (ok, txt) => lines.push(`<p>${ok ? "✅" : "❌"} ${esc(txt)}</p>`);
+  add(navigator.onLine, "İnternet: " + (navigator.onLine ? "var" : "yok"));
+  const ctrl = navigator.serviceWorker?.controller?.scriptURL || "yok";
+  add(!/ledsaha\.com\/sw\.js$/.test(ctrl), "Service worker: " + ctrl.replace(location.origin, ""));
+  try {
+    const t0 = performance.now();
+    const r = await fetch(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/todo/${OWNER}/lists?pageSize=1&key=${firebaseConfig.apiKey}`, { cache: "no-store" });
+    add(r.ok, `Firebase sunucusu: HTTP ${r.status} (${Math.round(performance.now() - t0)} ms)`);
+    if (!r.ok) lines.push(`<p class="sub">${esc((await r.text()).slice(0, 200))}</p>`);
+  } catch (err) { add(false, "Firebase sunucusuna ulaşılamadı: " + (err.message || err)); }
+  add(!sync.fromCache, "Canlı bağlantı: " + (sync.fromCache ? "kurulamadı" : "var"));
+  if (lastErr) add(false, "Son hata: " + lastErr);
+  lines.push(`<p class="sub">Sürüm v${APP_VERSION} · ${esc(navigator.userAgent.slice(0, 90))}</p>`);
+  lines.push(`<button class="btn" id="reconnBtn">🔄 Yeniden bağlan</button>`);
+  $("#installSteps").innerHTML = lines.join("");
+  $("#reconnBtn").onclick = async () => { closeSheets(); toast("🔄 Yeniden bağlanılıyor…");
+    try { await disableNetwork(db); await enableNetwork(db); } catch (err) { fbErr(err); } };
 });
 
 /* ---------- Görünümler ---------- */
@@ -868,6 +889,7 @@ $("#installBtn").onclick = async () => {
     await installEvt.userChoice.catch(() => {}); installEvt = null; return;
   }
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  $("#installSheet h3").textContent = "📲 Ana ekrana ekle";
   $("#installSteps").innerHTML = ios
     ? `<p>iPhone otomatik eklemeye izin vermiyor, 3 adımda ekleyebilirsin:</p>
        <p><b>1.</b> Adres çubuğundaki <b>Paylaş</b> simgesine dokun <span style="font-size:20px">⬆️</span></p>
@@ -881,7 +903,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.25-1200";
+const APP_VERSION = "2026.11.25-1210";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
