@@ -432,7 +432,7 @@ function render() {
   renderChips();
 
   const el = $("#list");
-  const vehBar = view === "list:" + VEH_LIST
+  const vehBar = isVehList(currentListId())
     ? `<button class="btn ghost" data-vehup style="margin:6px 0 4px">📥 Excel yükle / tarihleri güncelle</button>` : "";
   if (!items.length) {
     el.innerHTML = vehBar + `<div class="empty"><div>${q ? "🔍" : "🎉"}</div>${q ? "Sonuç yok" : view === "done" ? "Henüz tamamlanan yok" : "Burada görev yok. Aşağıdan ekle!"}</div>`;
@@ -468,6 +468,13 @@ function render() {
 }
 /* ---------- Araç takip ---------- */
 const VEH_LIST = "arac-takip";
+// "Araç" geçen her liste araç listesi sayılır (ör. "Araçların takibi")
+const isVehList = id => !!id && (id === VEH_LIST || /ara[çc]/i.test(lists.find(l => l.id === id)?.name || ""));
+function vehTargetList() {
+  if (isVehList(currentListId())) return currentListId();
+  const l = lists.find(x => isVehList(x.id));
+  return l ? l.id : VEH_LIST;
+}
 const VEH = [["kasko", "🛡️", "Kasko"], ["sigorta", "📄", "Sigorta"], ["muayene", "🔧", "Muayene"]];
 const daysTo = s => Math.round((new Date(s + "T00:00") - new Date(today() + "T00:00")) / 864e5);
 const vehNext = t => VEH.map(([k]) => t[k]).filter(Boolean).sort()[0] || "";
@@ -720,7 +727,7 @@ function openTask(id) {
   $("#fDue").value = t.due || ""; $("#fTime").value = t.time || "";
   $("#fRepeat").value = t.repeat || "none"; $("#fTags").value = (t.tags || []).join(", ");
   $("#fKasko").value = t.kasko || ""; $("#fSigorta").value = t.sigorta || ""; $("#fMuayene").value = t.muayene || "";
-  $("#fVeh").open = !!(t.veh || t.kasko || t.sigorta || t.muayene || t.listId === VEH_LIST);
+  $("#fVeh").open = !!(t.veh || t.kasko || t.sigorta || t.muayene || isVehList(t.listId));
   $("#fList").innerHTML = `<option value="">— Liste yok —</option>` + lists.map(l => `<option value="${l.id}">${esc(l.icon || "📁")} ${esc(l.name)}</option>`).join("");
   $("#fList").value = t.listId || "";
   prioDraft = t.priority || 0; paintPrio();
@@ -834,7 +841,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.25-0950";
+const APP_VERSION = "2026.11.25-1120";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
@@ -843,7 +850,7 @@ async function checkUpdate(silent) {
     if (v && v !== APP_VERSION) {
       if (silent) return toast("🆕 Yeni sürüm hazır", "Güncelle", () => reloadFresh(v));
       toast("🆕 Yeni sürüm yükleniyor…"); setTimeout(() => reloadFresh(v), 600);
-    } else if (!silent) toast("✅ Uygulama güncel (v" + APP_VERSION + ")");
+    } else if (!silent) toast("✅ Güncel (v" + APP_VERSION + ")", "Yine de yenile", () => reloadFresh(APP_VERSION + "-" + Date.now()));
   } catch (e) { if (!silent) toast("İnternet yok, denetlenemedi"); }
 }
 function reloadFresh(v) { location.replace(location.pathname + "?v=" + encodeURIComponent(v)); }
@@ -851,18 +858,18 @@ $("#updateBtn").onclick = () => { closeSheets(); checkUpdate(false); };
 setTimeout(() => checkUpdate(true), 3000);   // açılışta sessiz kontrol
 
 /* ---------- Araç listesi: ilk kurulum + Excel'den güncelleme ---------- */
-async function ensureVehList() {
-  if (lists.some(l => l.id === VEH_LIST)) return;
+async function ensureVehList(id) {
+  if (id !== VEH_LIST || lists.some(l => l.id === VEH_LIST)) return;
   await setDoc(ref("lists", VEH_LIST), { name: "Araç Takip", icon: "🚗", color: "#38bdf8", order: -1, createdAt: serverTimestamp() });
 }
-async function upsertVehicles(rows) {
-  await ensureVehList();
+async function upsertVehicles(rows, listId) {
+  await ensureVehList(listId);
   let n = 0;
   for (let i = 0; i < rows.length; i += 400) {
     const b = writeBatch(db);
     rows.slice(i, i + 400).forEach(v => {
       const ex = tasks.find(t => t.id === v.id);
-      const base = { title: v.title, kasko: v.kasko, sigorta: v.sigorta, muayene: v.muayene, note: v.note, veh: true, listId: VEH_LIST, updatedAt: serverTimestamp() };
+      const base = { title: v.title, kasko: v.kasko, sigorta: v.sigorta, muayene: v.muayene, note: v.note, veh: true, listId, updatedAt: serverTimestamp() };
       b.set(ref("tasks", v.id), ex ? base : { ...base, done: false, priority: 0, due: "", time: "", tags: [], subtasks: [], repeat: "none", createdAt: serverTimestamp() }, { merge: true });
       n++;
     });
@@ -896,8 +903,9 @@ $("#vehFile").onchange = async e => {
       return v;
     }).filter(v => v.title && (v.kasko || v.sigorta || v.muayene));
     if (!rows.length) return toast("Excel'de tarihli araç bulunamadı");
-    const n = await upsertVehicles(rows);
-    toast(`✅ ${n} araç güncellendi`); setView("list:" + VEH_LIST);
+    const target = vehTargetList();
+    const n = await upsertVehicles(rows, target);
+    toast(`✅ ${n} araç yüklendi`); setView("list:" + target);
   } catch (err) { console.error(err); toast("Excel okunamadı: " + (err.message || err)); }
 };
 
