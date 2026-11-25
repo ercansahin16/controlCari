@@ -224,8 +224,7 @@ textarea.inp{min-height:80px;resize:vertical}
   <button class="menu-item" id="updateBtn">⬇️ <span>Güncellemeleri denetle</span><span class="cnt" id="verLbl"></span></button>
   <button class="menu-item" id="themeBtn">🌓 <span>Açık / koyu tema</span></button>
   <button class="menu-item" id="clearDoneBtn">🧹 <span>Tamamlananları temizle</span></button>
-  <button class="menu-item" id="vehImportBtn">🚗 <span>Araç Excel'i yükle (tarihleri güncelle)</span></button>
-  <input type="file" id="vehFile" accept=".xlsx,.xls,.csv" class="hidden">
+  <label for="vehFile" class="menu-item" id="vehImportBtn" style="cursor:pointer">🚗 <span>Araç Excel'i yükle</span></label>
   <button class="menu-item" id="exportBtn">💾 <span>Yedek indir (JSON)</span></button>
 </div>
 
@@ -249,6 +248,7 @@ textarea.inp{min-height:80px;resize:vertical}
   <div id="installSteps" style="line-height:1.7"></div>
 </div>
 
+<input type="file" id="vehFile" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0">
 <div id="moveMenu" class="hidden"></div>
 <div class="overlay" id="moveOverlay"></div>
 
@@ -433,7 +433,7 @@ function render() {
 
   const el = $("#list");
   const vehBar = isVehList(currentListId())
-    ? `<button class="btn ghost" data-vehup style="margin:6px 0 4px">📥 Excel yükle / tarihleri güncelle</button>` : "";
+    ? `<label for="vehFile" class="btn ghost" data-vehup style="display:block;text-align:center;margin:6px 0 4px;cursor:pointer">📥 Excel yükle / tarihleri güncelle</label>` : "";
   if (!items.length) {
     el.innerHTML = vehBar + `<div class="empty"><div>${q ? "🔍" : "🎉"}</div>${q ? "Sonuç yok" : view === "done" ? "Henüz tamamlanan yok" : "Burada görev yok. Aşağıdan ekle!"}</div>`;
     return;
@@ -528,7 +528,7 @@ $("#q").oninput = render;
 let suppressClick = false;
 $("#list").onclick = e => {
   if (suppressClick) { suppressClick = false; return; }
-  if (e.target.closest("[data-vehup]")) return $("#vehFile").click();
+  if (e.target.closest("[data-vehup]")) return;
   const c = e.target.closest("[data-chk]");
   if (c) return toggleDone(c.dataset.chk);
   const t = e.target.closest(".task");
@@ -841,7 +841,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.25-1120";
+const APP_VERSION = "2026.11.25-1125";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
@@ -885,7 +885,6 @@ function toYMD(v) {
   const m = String(v).trim().match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/); if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
   const m2 = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m2 ? m2[0] : "";
 }
-$("#vehImportBtn").onclick = () => $("#vehFile").click();
 $("#vehFile").onchange = async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
   closeSheets(); toast("⏳ Excel okunuyor…");
