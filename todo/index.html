@@ -93,6 +93,9 @@ main{padding:4px 16px calc(110px + var(--safe-b))}
 #moveMenu button.cur{opacity:.4}
 #moveMenu button.del{color:var(--bad);border-top:1px solid var(--line);border-radius:0 0 10px 10px;margin-top:4px}
 #moveMenu button.del.hl{background:var(--bad);color:#fff}
+.t-meta .vok{color:var(--muted)}
+.t-meta b{font-weight:600}
+details.veh summary{color:var(--muted);font-size:13px;margin-bottom:8px;cursor:pointer}
 .empty{text-align:center;color:var(--muted);padding:60px 20px}
 .empty div{font-size:46px;margin-bottom:8px}
 
@@ -191,6 +194,13 @@ textarea.inp{min-height:80px;resize:vertical}
     </div>
   </div>
   <div class="field"><label>Etiketler (virgülle)</label><input class="inp" id="fTags" placeholder="iş, ev, alışveriş"></div>
+  <details class="field veh" id="fVeh"><summary>🚗 Araç tarihleri (kasko / sigorta / muayene)</summary>
+    <div class="row">
+      <div class="field"><label>Kasko bitiş</label><input class="inp" id="fKasko" type="date"></div>
+      <div class="field"><label>Sigorta bitiş</label><input class="inp" id="fSigorta" type="date"></div>
+    </div>
+    <div class="field"><label>Muayene bitiş</label><input class="inp" id="fMuayene" type="date"></div>
+  </details>
   <div class="field"><label>Alt görevler</label>
     <div class="sublist" id="fSubs"></div>
     <button class="btn ghost" id="addSub" type="button" style="margin-top:6px">+ Alt görev</button>
@@ -214,6 +224,8 @@ textarea.inp{min-height:80px;resize:vertical}
   <button class="menu-item" id="updateBtn">⬇️ <span>Güncellemeleri denetle</span><span class="cnt" id="verLbl"></span></button>
   <button class="menu-item" id="themeBtn">🌓 <span>Açık / koyu tema</span></button>
   <button class="menu-item" id="clearDoneBtn">🧹 <span>Tamamlananları temizle</span></button>
+  <button class="menu-item" id="vehImportBtn">🚗 <span>Araç Excel'i yükle (tarihleri güncelle)</span></button>
+  <input type="file" id="vehFile" accept=".xlsx,.xls,.csv" class="hidden">
   <button class="menu-item" id="exportBtn">💾 <span>Yedek indir (JSON)</span></button>
 </div>
 
@@ -344,8 +356,9 @@ const col = name => collection(db, "todo", OWNER, name);
 const ref = (name, id) => doc(db, "todo", OWNER, name, id);
 uid = OWNER;
 unsubs.push(onSnapshot(col("tasks"), s => { tasks = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }, fbErr));
-unsubs.push(onSnapshot(col("lists"), s => {
-  lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render(); }, fbErr));
+unsubs.push(onSnapshot(col("lists"), { includeMetadataChanges: true }, s => {
+  lists = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); render();
+  seedVehicles(!s.metadata.fromCache); }, fbErr));
 function fbErr(e) {
   console.error(e);
   toast("Hata: " + (e.code === "permission-denied" ? "Firestore kuralları yayınlanmamış" : (e.code || e.message)));
@@ -353,13 +366,13 @@ function fbErr(e) {
 
 /* ---------- Görünümler ---------- */
 const VIEWS = {
-  today:     { name: "Bugün",       icon: "☀️", f: t => !t.daily && !t.mine && !t.done && t.due && t.due <= today() },
+  today:     { name: "Bugün",       icon: "☀️", f: t => !t.daily && !t.mine && !t.veh && !t.done && t.due && t.due <= today() },
   daily:     { name: "Günlük",      icon: "🔄", f: t => t.daily, cnt: t => t.daily && !doneToday(t) },
   mine:      { name: "Kendim",      icon: "👤", f: t => t.mine && !t.daily && !t.done },
-  upcoming:  { name: "Yaklaşan",    icon: "📅", f: t => !t.daily && !t.mine && !t.done && t.due && t.due > today() },
-  important: { name: "Önemli",      icon: "⭐", f: t => !t.daily && !t.mine && !t.done && t.priority === 3 },
-  all:       { name: "Tümü",        icon: "📋", f: t => !t.daily && !t.mine && !t.done },
-  nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.daily && !t.mine && !t.done && !t.due },
+  upcoming:  { name: "Yaklaşan",    icon: "📅", f: t => !t.daily && !t.mine && !t.veh && !t.done && t.due && t.due > today() },
+  important: { name: "Önemli",      icon: "⭐", f: t => !t.daily && !t.mine && !t.veh && !t.done && t.priority === 3 },
+  all:       { name: "Tümü",        icon: "📋", f: t => !t.daily && !t.mine && !t.veh && !t.done },
+  nodate:    { name: "Tarihsiz",    icon: "🗂️", f: t => !t.daily && !t.mine && !t.veh && !t.done && !t.due },
   done:      { name: "Tamamlanan",  short: "Biten", icon: "✅", f: t => !t.daily && t.done },
 };
 const doneToday = t => t.daily && (t.dailyDone ?? !!t.lastDone);   // günlükler sabit: gece sıfırlanmaz
@@ -371,7 +384,7 @@ const next7 = () => Array.from({ length: 7 }, (_, i) => addDays(today(), i));
 const dayParts = s => { const d = new Date(s + "T00:00"); return { wd: DAYN[d.getDay()], n: d.getDate(), we: [0, 6].includes(d.getDay()) }; };
 const dayName = s => s === today() ? "Bugün" : s === addDays(today(), 1) ? "Yarın"
   : new Date(s + "T00:00").toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" });
-const dayFilter = s => t => !t.daily && !t.mine && !t.done && t.due === s;
+const dayFilter = s => t => !t.daily && !t.mine && !t.veh && !t.done && t.due === s;
 function viewInfo() {
   if (view.startsWith("day:")) {
     const ds = view.slice(4);
@@ -426,7 +439,13 @@ function render() {
   }
   // Gruplama
   let groups;
-  if (q || view === "done" || sortBy !== "smart") groups = [["", items]];
+  const vehView = view.startsWith("list:") && items.some(t => t.veh);
+  if (vehView && !q) {
+    // En yakın kasko / sigorta / muayene tarihi en üstte
+    items.sort((a, b) => (vehNext(a) || "9999").localeCompare(vehNext(b) || "9999"));
+    const g = k => items.filter(t => { const nx = vehNext(t); if (!nx) return k === 3; const n = daysTo(nx); return k === (n < 0 ? 0 : n <= 30 ? 1 : 2); });
+    groups = [["⛔ Süresi geçen", g(0)], ["⚠️ 30 gün içinde", g(1)], ["✅ İleri tarihli", g(2)], ["Tarihsiz", g(3)]];
+  } else if (q || view === "done" || sortBy !== "smart") groups = [["", items]];
   else if (view === "daily") {
     groups = [["Yapılacak", items.filter(t => !doneToday(t))], ["Tamamlandı", items.filter(doneToday)]];
   } else if (view === "today") {
@@ -446,14 +465,33 @@ function render() {
     (name ? `<div class="group-title"><span>${esc(name)}</span><span>${arr.length}</span></div>` : "") + arr.map(taskHTML).join("")
   ).join("");
 }
+/* ---------- Araç takip ---------- */
+const VEH_LIST = "arac-takip";
+const VEH = [["kasko", "🛡️", "Kasko"], ["sigorta", "📄", "Sigorta"], ["muayene", "🔧", "Muayene"]];
+const daysTo = s => Math.round((new Date(s + "T00:00") - new Date(today() + "T00:00")) / 864e5);
+const vehNext = t => VEH.map(([k]) => t[k]).filter(Boolean).sort()[0] || "";
+const shortDate = s => s.slice(8, 10) + "." + s.slice(5, 7) + "." + s.slice(2, 4);
+function vehChips(t) {
+  const nx = vehNext(t);
+  return VEH.filter(([k]) => t[k]).map(([k, ic, nm]) => {
+    const n = daysTo(t[k]);
+    const cls = n < 0 ? "late" : n <= 30 ? "today" : "vok";
+    const left = n < 0 ? `${-n} gün geçti` : n === 0 ? "bugün" : `${n} gün`;
+    const txt = `${ic} ${nm} ${shortDate(t[k])} · ${left}`;
+    return `<span class="${cls}">${t[k] === nx ? `<b>${txt}</b>` : txt}</span>`;
+  });
+}
+
 function taskHTML(t) {
   const d = dueLabel(t), l = lists.find(x => x.id === t.listId);
   const subs = t.subtasks || [], sd = subs.filter(s => s.d).length;
   const meta = [
     !t.daily && d && `<span class="${d.cls}">📅 ${esc(d.txt)}</span>`,
+    ...(t.veh ? vehChips(t) : []),
     t.repeat && t.repeat !== "none" && `<span>🔁 ${REP[t.repeat]}</span>`,
     subs.length && `<span>☑️ ${sd}/${subs.length}</span>`,
-    t.note && `<span>📝</span>`,
+    t.note && !t.veh && `<span>📝</span>`,
+    t.note && t.veh && `<span class="vok">${esc(t.note)}</span>`,
     l && !view.startsWith("list:") && `<span style="color:${l.color}">${esc(l.icon || "📁")} ${esc(l.name)}</span>`,
     ...(t.tags || []).map(g => `<span>#${esc(g)}</span>`)
   ].filter(Boolean).join("");
@@ -568,7 +606,7 @@ async function moveTo(t, key) {
 let mv = null;   // { task, timer, x, y, open, hl }
 function openMoveMenu(t, x, y) {
   const m = $("#moveMenu");
-  const plain = !t.daily && !t.mine && !t.done;
+  const plain = !t.daily && !t.mine && !t.veh && !t.done;
   m.innerHTML = `<div class="mh">“${esc(t.title)}” → taşı</div><div class="mdays">` +
     next7().map(ds => { const p = dayParts(ds);
       return `<button data-mv="day:${ds}" class="${plain && t.due === ds ? "cur" : ""}">${ds === today() ? "Bgn" : p.wd}<b>${p.n}</b></button>`; }).join("") + `</div>` +
@@ -679,6 +717,8 @@ function openTask(id) {
   $("#fTitle").value = t.title; $("#fNote").value = t.note || "";
   $("#fDue").value = t.due || ""; $("#fTime").value = t.time || "";
   $("#fRepeat").value = t.repeat || "none"; $("#fTags").value = (t.tags || []).join(", ");
+  $("#fKasko").value = t.kasko || ""; $("#fSigorta").value = t.sigorta || ""; $("#fMuayene").value = t.muayene || "";
+  $("#fVeh").open = !!(t.veh || t.kasko || t.sigorta || t.muayene || t.listId === VEH_LIST);
   $("#fList").innerHTML = `<option value="">— Liste yok —</option>` + lists.map(l => `<option value="${l.id}">${esc(l.icon || "📁")} ${esc(l.name)}</option>`).join("");
   $("#fList").value = t.listId || "";
   prioDraft = t.priority || 0; paintPrio();
@@ -704,6 +744,8 @@ $("#saveTask").onclick = async () => {
   const data = {
     title, note: $("#fNote").value.trim(), due: $("#fDue").value, time: $("#fTime").value,
     priority: prioDraft, listId: $("#fList").value, repeat: $("#fRepeat").value,
+    kasko: $("#fKasko").value, sigorta: $("#fSigorta").value, muayene: $("#fMuayene").value,
+    veh: !!($("#fKasko").value || $("#fSigorta").value || $("#fMuayene").value),
     tags: $("#fTags").value.split(",").map(s => s.trim().replace(/^#/, "").toLowerCase()).filter(Boolean).slice(0, 20),
     subtasks: subDraft.filter(s => s.t.trim()).map(s => ({ t: s.t.trim(), d: !!s.d })),
     updatedAt: serverTimestamp()
@@ -790,7 +832,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.19-1705";
+const APP_VERSION = "2026.11.25-0945";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
@@ -805,6 +847,65 @@ async function checkUpdate(silent) {
 function reloadFresh(v) { location.replace(location.pathname + "?v=" + encodeURIComponent(v)); }
 $("#updateBtn").onclick = () => { closeSheets(); checkUpdate(false); };
 setTimeout(() => checkUpdate(true), 3000);   // açılışta sessiz kontrol
+
+/* ---------- Araç listesi: ilk kurulum + Excel'den güncelleme ---------- */
+let vehSeeded = false;
+async function ensureVehList() {
+  if (lists.some(l => l.id === VEH_LIST)) return;
+  await setDoc(ref("lists", VEH_LIST), { name: "Araç Takip", icon: "🚗", color: "#38bdf8", order: -1, createdAt: serverTimestamp() });
+}
+async function upsertVehicles(rows) {
+  await ensureVehList();
+  let n = 0;
+  for (let i = 0; i < rows.length; i += 400) {
+    const b = writeBatch(db);
+    rows.slice(i, i + 400).forEach(v => {
+      const ex = tasks.find(t => t.id === v.id);
+      const base = { title: v.title, kasko: v.kasko, sigorta: v.sigorta, muayene: v.muayene, note: v.note, veh: true, listId: VEH_LIST, updatedAt: serverTimestamp() };
+      b.set(ref("tasks", v.id), ex ? base : { ...base, done: false, priority: 0, due: "", time: "", tags: [], subtasks: [], repeat: "none", createdAt: serverTimestamp() }, { merge: true });
+      n++;
+    });
+    await b.commit();
+  }
+  return n;
+}
+async function seedVehicles(fromServer) {
+  if (vehSeeded || !fromServer) return;
+  vehSeeded = true;
+  if (lists.some(l => l.id === VEH_LIST)) return;     // zaten kurulu
+  try { const rows = await (await fetch("araclar.json", { cache: "no-store" })).json(); await upsertVehicles(rows); toast(`🚗 Araç Takip listesi oluşturuldu (${rows.length} araç)`); }
+  catch (e) { console.error(e); }
+}
+const pick = (o, name) => { const k = Object.keys(o).find(x => x.trim().toLocaleLowerCase("tr") === name.toLocaleLowerCase("tr")); return k ? o[k] : ""; };
+function toYMD(v) {
+  if (!v && v !== 0) return "";
+  if (v instanceof Date && !isNaN(v)) return ymd(new Date(v.getTime() + 12 * 3600e3));
+  if (typeof v === "number") { const d = new Date(Math.round((v - 25569) * 864e5)); return ymd(new Date(d.getTime() + 12 * 3600e3)); }
+  const m = String(v).trim().match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})/); if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+  const m2 = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m2 ? m2[0] : "";
+}
+$("#vehImportBtn").onclick = () => $("#vehFile").click();
+$("#vehFile").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  closeSheets(); toast("⏳ Excel okunuyor…");
+  try {
+    const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs");
+    const wb = XLSX.read(await f.arrayBuffer(), { cellDates: true });
+    const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+    const rows = data.map(r => {
+      const title = String(pick(r, "Araç Açıklaması") || "").trim();
+      const code = String(pick(r, "Araç Kodu") || title).replace(/[^A-Za-z0-9]/g, "");
+      const v = { id: "arac-" + code, title, kasko: toYMD(pick(r, "Kasko Bitiş Tarihi")), sigorta: toYMD(pick(r, "Sigorta Bitiş Tarihi")), muayene: toYMD(pick(r, "Muayene Bitiş Tarihi")) };
+      const mm = [pick(r, "Marka"), pick(r, "Model")].map(x => String(x).trim()).filter(Boolean).join(" ");
+      const dr = String(pick(r, "Sürücü Ad Soyad") || "").trim(), km = pick(r, "Güncel Km");
+      v.note = [mm, String(pick(r, "Grup") || "").trim(), dr && "Sürücü: " + dr, km && km !== 0 ? "Km: " + km : ""].filter(Boolean).join(" · ");
+      return v;
+    }).filter(v => v.title && (v.kasko || v.sigorta || v.muayene));
+    if (!rows.length) return toast("Excel'de tarihli araç bulunamadı");
+    const n = await upsertVehicles(rows);
+    toast(`✅ ${n} araç güncellendi`); setView("list:" + VEH_LIST);
+  } catch (err) { console.error(err); toast("Excel okunamadı: " + (err.message || err)); }
+};
 
 /* ---------- Liste düzenleyici ---------- */
 function openList(id) {
