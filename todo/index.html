@@ -96,6 +96,12 @@ main{padding:4px 16px calc(110px + var(--safe-b))}
 .t-meta .vok{color:var(--muted)}
 .t-meta b{font-weight:600}
 details.veh summary{color:var(--muted);font-size:13px;margin-bottom:8px;cursor:pointer}
+@media (min-width:800px){
+  header,main{max-width:760px;margin-left:auto;margin-right:auto}
+  header{padding-top:20px}
+  .chip{font-size:14px;padding:10px 4px}
+  .day{padding:8px 0}
+}
 .empty{text-align:center;color:var(--muted);padding:60px 20px}
 .empty div{font-size:46px;margin-bottom:8px}
 
@@ -427,7 +433,7 @@ function render() {
     });
   }
   items.sort(sorter);
-  const open = tasks.filter(t => !t.daily && !t.done).length;
+  const open = tasks.filter(t => !t.daily && !t.veh && !t.done).length;
   $("#viewSub").textContent = new Date().toLocaleDateString("tr-TR", { weekday:"long", day:"numeric", month:"long" }) + ` · ${items.length} görev · toplam ${open} açık`;
   renderChips();
 
@@ -778,7 +784,7 @@ $("#quickInput").addEventListener("dblclick", () => openTask(null));
 
 /* ---------- Menü ---------- */
 $("#menuBtn").onclick = () => {
-  const nd = tasks.filter(t => !t.daily);
+  const nd = tasks.filter(t => !t.daily && !t.veh);
   const open = nd.filter(t => !t.done).length, done = nd.filter(t => t.done).length;
   const late = nd.filter(t => !t.done && t.due && t.due < today()).length;
   const dl = tasks.filter(t => t.daily), dlDone = dl.filter(doneToday).length;
@@ -841,7 +847,7 @@ $("#installBtn").onclick = async () => {
 
 /* ---------- Güncelleme denetimi ----------
    Yeni sürüm yayınlarken APP_VERSION ve version.json birlikte değiştirilir. */
-const APP_VERSION = "2026.11.25-1125";
+const APP_VERSION = "2026.11.25-1130";
 $("#verLbl").textContent = "v" + APP_VERSION;
 async function checkUpdate(silent) {
   try {
